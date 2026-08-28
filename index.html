@@ -1,0 +1,1579 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LexExtract V2</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+:root{
+  --navy:#132A47; --navy-deep:#0C1D33; --paper:#F6F5F1; --panel:#FFFFFF;
+  --ink:#1C2431; --orange:#E87722; --gold:#C9A227; --slate:#5E6B7C;
+  --line:#DAD7CE; --good:#2E7D32; --warn:#A96500; --bad:#B3261E;
+  --ff-display:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+  --ff-body:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  --ff-mono:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:var(--ff-body);background:var(--paper);color:var(--ink);font-size:14px;display:flex}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:4px;background:#fff;color:var(--ink)}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--orange);outline-offset:1px}
+textarea{resize:vertical}
+/* sidebar */
+#side{width:198px;min-width:198px;background:var(--navy);color:#E8ECF2;display:flex;flex-direction:column;height:100vh;position:sticky;top:0}
+#side .brand{padding:18px 16px 14px;border-bottom:1px solid rgba(255,255,255,.12)}
+#side .brand h1{font-family:var(--ff-display);font-size:19px;font-weight:600;letter-spacing:.02em}
+#side .brand h1 span{color:var(--orange)}
+#side .brand small{display:block;color:#93A3B8;font-size:11px;margin-top:3px;font-family:var(--ff-mono)}
+#side nav{flex:1;padding:10px 0}
+#side nav button{display:flex;align-items:center;justify-content:space-between;width:100%;background:none;border:none;color:#C4CEDC;text-align:left;padding:10px 16px;font-size:13.5px;border-left:3px solid transparent}
+#side nav button:hover{background:rgba(255,255,255,.06);color:#fff}
+#side nav button.on{background:rgba(255,255,255,.08);color:#fff;border-left-color:var(--orange)}
+#side nav button .n{font-family:var(--ff-mono);font-size:11px;background:rgba(255,255,255,.14);border-radius:10px;padding:1px 7px;min-width:22px;text-align:center}
+#side nav button .n.hot{background:var(--orange);color:#fff}
+#side .foot{padding:12px 16px;border-top:1px solid rgba(255,255,255,.12);font-size:11px;color:#93A3B8}
+#side .foot .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--good);margin-right:5px}
+#side .foot .dot.dirty{background:var(--warn)}
+/* main */
+#app{display:flex;width:100%}
+#main{flex:1;min-width:0;padding:22px 26px 60px;max-width:1280px}
+#gate{position:fixed;inset:0;background:var(--navy);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px}
+.gatebox{background:#fff;border-radius:8px;padding:28px;width:100%;max-width:340px;text-align:center}
+.gatebox h1{font-family:var(--ff-display);font-size:26px;color:var(--navy);margin-bottom:4px}
+.gatebox h1 span{color:var(--orange)}
+.gatebox p{color:var(--slate);font-size:13px;margin-bottom:14px}
+.gatebox input{width:100%;margin-bottom:8px;padding:9px 10px}
+.gatebox button{width:100%;padding:10px}
+.gatebox .err{color:var(--bad);font-size:12.5px;margin:8px 0 0;min-height:16px}
+.editstamp{font-size:11px;color:var(--slate);font-family:var(--ff-mono)}
+.view{display:none}
+.view.on{display:block}
+h2{font-family:var(--ff-display);font-size:22px;font-weight:600;margin-bottom:4px}
+.sub{color:var(--slate);margin-bottom:18px;font-size:13px}
+h3{font-family:var(--ff-display);font-size:16px;font-weight:600;margin:20px 0 8px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:16px;margin-bottom:14px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.grow{flex:1;min-width:140px}
+.btn{background:var(--navy);color:#fff;border:none;border-radius:4px;padding:8px 14px;font-size:13px;font-weight:500}
+.btn:hover{background:var(--navy-deep)}
+.btn.orange{background:var(--orange)}
+.btn.orange:hover{background:#CE6414}
+.btn.ghost{background:none;color:var(--navy);border:1px solid var(--line)}
+.btn.ghost:hover{border-color:var(--navy)}
+.btn.sm{padding:4px 9px;font-size:12px}
+.btn.danger{background:none;border:1px solid var(--line);color:var(--bad)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+/* docket stamp — signature element for claim identifiers */
+.docket{font-family:var(--ff-mono);font-size:12px;letter-spacing:.03em;border:1.5px solid var(--navy);color:var(--navy);border-radius:3px;padding:1px 7px;background:#fff;white-space:nowrap}
+.docket.int{border-color:var(--gold);color:#7A6210}
+.pill{display:inline-block;font-size:11px;font-weight:600;border-radius:10px;padding:2px 9px;white-space:nowrap}
+.pill.grey{background:#E7E5DE;color:var(--slate)}
+.pill.green{background:#DFF0E0;color:var(--good)}
+.pill.amber{background:#F6E8CE;color:var(--warn)}
+.pill.red{background:#F7DEDC;color:var(--bad)}
+.pill.navy{background:#DCE4EF;color:var(--navy)}
+.pill.orange{background:#FBE4D2;color:#B35310}
+table{width:100%;border-collapse:collapse;background:#fff}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--slate);text-align:left;padding:8px 10px;border-bottom:2px solid var(--line);background:#FBFAF7;position:sticky;top:0}
+td{padding:8px 10px;border-bottom:1px solid #EFEDE7;vertical-align:top}
+tr:hover td{background:#FBFAF6}
+.tblwrap{border:1px solid var(--line);border-radius:6px;overflow:auto;max-height:560px}
+.muted{color:var(--slate)}
+.small{font-size:12px}
+.mono{font-family:var(--ff-mono)}
+.drop{border:2px dashed var(--line);border-radius:6px;padding:26px;text-align:center;color:var(--slate);background:#fff}
+.drop.over{border-color:var(--orange);background:#FFF7F0}
+.fieldgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.fieldgrid label,.stack label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--slate);margin-bottom:3px}
+.fieldgrid input,.fieldgrid select{width:100%}
+.stack{margin-bottom:10px}
+.stack textarea,.stack input{width:100%}
+.conflict{border:1px solid #E7C89A;background:#FDF6EC;border-radius:5px;padding:10px;margin:8px 0}
+.conflict .opts{display:flex;gap:8px;margin-top:6px;flex-wrap:wrap}
+.conflict .opt{flex:1;min-width:180px;border:1.5px solid var(--line);border-radius:5px;padding:8px;background:#fff;cursor:pointer;font-size:12.5px}
+.conflict .opt:hover{border-color:var(--orange)}
+.conflict .opt.chosen{border-color:var(--good);background:#F2FAF2}
+.conflict .opt .src{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--slate);display:block;margin-bottom:3px}
+.claimcard{border:1px solid var(--line);border-radius:6px;background:#fff;margin-bottom:12px}
+.claimcard>.head{display:flex;gap:10px;align-items:center;padding:12px 14px;cursor:pointer;flex-wrap:wrap}
+.claimcard>.head .title{font-family:var(--ff-display);font-size:15px;font-weight:600;flex:1;min-width:200px}
+.claimcard>.body{border-top:1px solid var(--line);padding:14px;display:none}
+.claimcard.open>.body{display:block}
+.sidebox{border:1px solid var(--line);border-radius:5px;padding:10px;margin-top:8px;background:#FCFBF8}
+.sidebox h4{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--navy);margin-bottom:6px}
+.firmline{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:4px 0;border-bottom:1px dashed #E8E5DD}
+.firmline:last-child{border-bottom:none}
+.chip{font-family:var(--ff-mono);font-size:11.5px;border:1.5px solid var(--line);background:#fff;border-radius:12px;padding:2px 9px;margin:0 3px 0 0;color:var(--slate);cursor:pointer}
+.chip.on{border-color:var(--orange);color:#B35310;background:#FBE4D2;font-weight:600}
+.chip:hover{border-color:var(--orange)}
+.statgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.stat{background:#fff;border:1px solid var(--line);border-radius:6px;padding:12px}
+.stat .v{font-family:var(--ff-display);font-size:24px;font-weight:600;color:var(--navy)}
+.stat .l{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--slate);margin-top:2px}
+.leadrow.exp{background:#FBFAF6}
+.leaddetail td{background:#FCFBF8 !important;padding:14px}
+.notehist{border-left:3px solid var(--line);padding-left:10px;margin:6px 0}
+.notehist .n{margin-bottom:6px;font-size:12.5px}
+.notehist .n .d{color:var(--slate);font-family:var(--ff-mono);font-size:11px;margin-right:6px}
+#toast{position:fixed;bottom:20px;right:20px;background:var(--navy);color:#fff;padding:10px 16px;border-radius:5px;font-size:13px;display:none;z-index:60;max-width:380px}
+#toast.err{background:var(--bad)}
+.prog{font-family:var(--ff-mono);font-size:12px;white-space:pre-wrap;background:var(--navy-deep);color:#C9D6E8;border-radius:5px;padding:10px;max-height:220px;overflow:auto;margin-top:10px;display:none}
+details.adv{margin-top:10px}
+details.adv summary{cursor:pointer;color:var(--slate);font-size:12.5px}
+@media (max-width:820px){body{flex-direction:column}#side{width:100%;height:auto;position:static;flex-direction:row;align-items:center}#side nav{display:flex;overflow:auto;padding:0}#side .foot{display:none}#side nav button{border-left:none;border-bottom:3px solid transparent;white-space:nowrap}#side nav button.on{border-bottom-color:var(--orange)}#main{padding:14px}}
+@media (prefers-reduced-motion:no-preference){.claimcard>.body{animation:fade .15s ease}@keyframes fade{from{opacity:0}to{opacity:1}}}
+</style>
+</head>
+<body>
+<div id="gate">
+  <div class="gatebox">
+    <h1>Lex<span>Extract</span></h1>
+    <p>Enter the team passcode to continue.</p>
+    <input id="gatePass" type="password" placeholder="Passcode" autocomplete="current-password">
+    <input id="gateName" placeholder="Your name (shown on your edits)" autocomplete="name">
+    <button class="btn orange" id="gateBtn" onclick="doLogin()">Enter</button>
+    <p id="gateErr" class="err"></p>
+  </div>
+</div>
+<div id="app" style="display:none;width:100%">
+<aside id="side">
+  <div class="brand"><h1>Lex<span>Extract</span></h1><small>Web · build 1</small></div>
+  <nav id="nav"></nav>
+  <div class="foot"><span class="dot" id="saveDot"></span><span id="saveLbl">Saved</span><br><span id="whoLbl"></span></div>
+</aside>
+<div id="main">
+
+<section class="view" id="v-dash">
+  <h2>Dashboard</h2>
+  <p class="sub">Cycle overview and anything needing attention.</p>
+  <div class="statgrid" id="dashStats"></div>
+  <div id="dashAlerts"></div>
+</section>
+
+<section class="view" id="v-extract">
+  <h2>Extract &amp; import</h2>
+  <p class="sub">Drop OCR'd claim PDFs and the Solomonic CSV together. Files sharing a claim-number prefix are treated as one claim.</p>
+  <div class="card">
+    <div class="row" style="margin-bottom:10px">
+      <div class="grow"><label class="small muted">Cycle label (goes in Round Up)</label><input id="cycleLbl" style="width:100%" placeholder="e.g. 20 July Roundup"></div>
+    </div>
+    <div class="drop" id="dropzone">Drag claim PDFs (and the Solomonic CSV) here, or <button class="btn ghost sm" onclick="document.getElementById('fileInput').click()">browse</button>
+      <input type="file" id="fileInput" multiple accept=".pdf,.txt,.md,.csv" style="display:none">
+    </div>
+    <div id="stagedFiles" class="small" style="margin-top:10px"></div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn orange" id="runBtn" onclick="runExtraction()" disabled>Extract claims</button>
+      <span class="small muted" id="solomonicLbl">No Solomonic CSV loaded</span>
+    </div>
+    <div class="prog" id="progLog"></div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Intelligence lead (news article)</h3>
+    <p class="small muted" style="margin-bottom:8px">For articles with enough detail to act on. No court claim number is invented — it gets an INT reference.</p>
+    <div class="stack"><textarea id="intText" rows="5" placeholder="Paste the article text…"></textarea></div>
+    <button class="btn" onclick="extractIntelligence()">Extract intelligence lead</button>
+  </div>
+</section>
+
+<section class="view" id="v-review">
+  <h2>Review &amp; publish</h2>
+  <p class="sub">Drafts stay here until you publish. Publishing creates one lead per firm per side.</p>
+  <div id="draftList"></div>
+</section>
+
+<section class="view" id="v-leads">
+  <h2>Leads &amp; outreach</h2>
+  <p class="sub">One row per firm per side. Log outreach reported by AEs here.</p>
+  <div class="card">
+    <div class="row">
+      <input id="lf-search" placeholder="Search…" class="grow" oninput="renderLeads()">
+      <select id="lf-ae" onchange="renderLeads()"><option value="">All AEs</option></select>
+      <select id="lf-side" onchange="renderLeads()"><option value="">All sides</option><option>Claimant</option><option>Defendant</option><option>Intelligence</option></select>
+      <select id="lf-outreach" onchange="renderLeads()"><option value="">All outreach</option><option>Not logged</option><option>No Outreach</option><option>No Response</option><option>Not Relevant</option><option>Positive</option></select>
+      <select id="lf-cycle" onchange="renderLeads()"><option value="">All cycles</option></select>
+    </div>
+  </div>
+  <div class="tblwrap"><table id="leadsTable"><thead><tr>
+    <th>Lead</th><th>Case</th><th>Firm</th><th>Owners</th><th>Outreach</th><th>Status</th><th>Result</th><th>Follow-up</th>
+  </tr></thead><tbody id="leadsBody"></tbody></table></div>
+</section>
+
+<section class="view" id="v-firms">
+  <h2>Firms &amp; AE mapping</h2>
+  <p class="sub">Canonical firm names, aliases and AE owners. This drives lead assignment at publish.</p>
+  <div class="card">
+    <div class="row">
+      <button class="btn" onclick="document.getElementById('firmsXlsx').click()">Import from roundup workbook (.xlsx)</button>
+      <input type="file" id="firmsXlsx" accept=".xlsx" style="display:none" onchange="importFirmsXlsx(this.files[0])">
+      <button class="btn ghost" onclick="addFirm()">Add firm</button>
+      <input id="firmSearch" placeholder="Search firms…" class="grow" oninput="renderFirms()">
+    </div>
+    <p class="small muted" style="margin-top:8px">Import reads the Firms sheet (both embedded tables), trims whitespace, splits combined AEs like “Alys/Chids” into co-owners, and de-duplicates. Review before relying on it.</p>
+  </div>
+  <div class="tblwrap"><table><thead><tr><th>Firm</th><th>Aliases</th><th>AEs</th><th>Type</th><th></th></tr></thead><tbody id="firmsBody"></tbody></table></div>
+</section>
+
+<section class="view" id="v-reports">
+  <h2>Reports</h2>
+  <p class="sub">Programme performance for management. Figures reflect published leads only.</p>
+  <div class="row" style="margin-bottom:12px">
+    <select id="rep-cycle" onchange="renderReports()"><option value="">All cycles</option></select>
+  </div>
+  <div id="reportBody"></div>
+</section>
+
+<section class="view" id="v-data">
+  <h2>Data &amp; exports</h2>
+  <p class="sub">The JSON file on SharePoint is the record. Save after every session; load it before starting one.</p>
+  <div class="card">
+    <h3 style="margin-top:0">You</h3>
+    <div class="fieldgrid">
+      <div><label>Signed in as</label><input id="set-name" disabled></div>
+      <div><label>BD inbox (for the exported read-only board)</label><input id="set-email" onchange="saveSettings()"></div>
+    </div>
+    <div class="row" style="margin-top:10px"><button class="btn ghost sm" onclick="signOut()">Sign out</button>
+      <span class="small muted">Your name is stamped on every edit you make.</span></div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Shared data</h3>
+    <p class="small muted" style="margin-bottom:8px">Everything is saved on the server automatically as you work — everyone signed in sees the same data. The version number in the sidebar increments on every save.</p>
+    <div class="row">
+      <button class="btn ghost" onclick="pullState(false)">Refresh from server</button>
+      <button class="btn orange" onclick="saveJson()">Download backup (JSON)</button>
+      <button class="btn ghost" onclick="document.getElementById('loadJsonInput').click()">Restore from backup</button>
+      <input type="file" id="loadJsonInput" accept=".json" style="display:none" onchange="loadJson(this.files[0])">
+    </div>
+    <p class="small muted" style="margin-top:8px">Take a backup before each cycle and keep it on SharePoint. Restoring overwrites the shared data for everyone.</p>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Exports</h3>
+    <div class="row">
+      <button class="btn" onclick="exportBoard()">AE lead board (HTML)</button>
+      <button class="btn" onclick="exportRoundup()">Excel roundup</button>
+    </div>
+    <p class="small muted" style="margin-top:8px">The HTML board is a read-only snapshot for anyone outside the team. Everyone with the passcode should use this site instead.</p>
+    <div class="row" style="margin-top:8px">
+      <label class="small muted">Roundup cycle:&nbsp;</label><select id="exp-cycle"></select>
+    </div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Activity log</h3>
+    <div id="actLog" class="small muted" style="max-height:200px;overflow:auto"></div>
+    <details class="adv"><summary>Danger zone</summary>
+      <button class="btn danger sm" style="margin-top:8px" onclick="wipeAll()">Clear all data in this artifact</button>
+    </details>
+  </div>
+</section>
+
+</div>
+<div id="toast"></div>
+<script>
+/* ============ state, storage, utils ============ */
+const NAV = [["dash","Dashboard"],["extract","Extract"],["review","Review",()=>S.drafts.length],["leads","Leads",()=>S.leads.length],["firms","Firms",()=>S.firms.length],["reports","Reports"],["data","Data"]];
+let S = blankState();
+let dirty = false;
+
+function blankState(){return {version:2, settings:{name:"",email:"",intCounter:{}}, firms:[], claims:[], drafts:[], leads:[], log:[]};}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
+function today(){return new Date().toISOString().slice(0,10);}
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function toast(msg,err){const t=document.getElementById("toast");t.textContent=msg;t.className=err?"err":"";t.style.display="block";clearTimeout(t._t);t._t=setTimeout(()=>t.style.display="none",3500);}
+function logAct(msg){S.log.unshift({d:new Date().toISOString().slice(0,16).replace("T"," "),m:msg});S.log=S.log.slice(0,300);}
+function isPlaceholder(v){return !v || /^no .{0,30}provided\.?$/i.test(String(v).trim()) || /^not provided$/i.test(String(v).trim());}
+function val(v){return isPlaceholder(v)?"":String(v).trim();}
+let saveDebounce=null;
+function markDirty(){
+  dirty=true;
+  document.getElementById("saveDot").classList.add("dirty");
+  document.getElementById("saveLbl").textContent="Saving…";
+  clearTimeout(saveDebounce);
+  saveDebounce=setTimeout(()=>{if(PASS)pushState();},900);
+}
+function markClean(){dirty=false;document.getElementById("saveDot").classList.remove("dirty");document.getElementById("saveLbl").textContent="Saved · v"+VERSION;}
+
+let VERSION=0, PASS="", WHO="", saving=false, pendingSave=false, pollTimer=null;
+function api(action,opts){
+  opts=opts||{};
+  return fetch("/api/"+action,{method:opts.method||"GET",
+    headers:Object.assign({"content-type":"application/json","x-team-pass":PASS},opts.headers||{}),
+    body:opts.body?JSON.stringify(opts.body):undefined});
+}
+async function cacheState(){ /* server-backed: saving is explicit via pushState */ }
+async function pushState(){
+  if(saving){pendingSave=true;return;}
+  saving=true;
+  try{
+    const r=await api("state",{method:"POST",body:{version:VERSION,state:S,who:WHO}});
+    if(r.status===409){
+      const c=await r.json();
+      VERSION=c.version;S=migrate(c.state);
+      refreshNav();rerenderCurrent();
+      toast("Someone else saved changes while you were editing — the latest version has been loaded. Re-apply your edit.",true);
+      return;
+    }
+    if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error||("HTTP "+r.status));}
+    const d=await r.json();
+    VERSION=d.version;markClean();
+  }catch(err){
+    toast("Save failed: "+err.message+" — your changes are only in this browser.",true);
+  }finally{
+    saving=false;
+    if(pendingSave){pendingSave=false;pushState();}
+  }
+}
+async function pullState(quiet){
+  try{
+    const r=await api("state");
+    if(!r.ok)throw new Error("HTTP "+r.status);
+    const d=await r.json();
+    if(d.state&&d.version!==VERSION){
+      VERSION=d.version;S=migrate(d.state);
+      refreshNav();rerenderCurrent();
+      if(!quiet)toast("Loaded shared data (v"+VERSION+").");
+      else if(d.savedBy&&d.savedBy!==WHO)toast("Updated by "+d.savedBy+".");
+      markClean();
+    }else if(!d.state&&!quiet){
+      toast("No shared data yet — import your firms and run a cycle, or load a JSON backup.");
+    }
+  }catch(err){if(!quiet)toast("Could not load shared data: "+err.message,true);}
+}
+function startPolling(){
+  if(pollTimer)clearInterval(pollTimer);
+  pollTimer=setInterval(()=>{if(!dirty&&!saving)pullState(true);},25000);
+}
+function rerenderCurrent(){
+  const on=document.querySelector(".view.on");
+  if(!on)return;
+  const v=on.id.replace("v-","");
+  if(v==="dash")renderDash();else if(v==="review")renderDrafts();else if(v==="leads")renderLeads();
+  else if(v==="firms")renderFirms();else if(v==="reports")renderReports();else if(v==="data")renderData();
+}
+async function doLogin(){
+  const pass=document.getElementById("gatePass").value.trim();
+  const name=document.getElementById("gateName").value.trim();
+  const err=document.getElementById("gateErr");
+  if(!pass||!name){err.textContent="Both the passcode and your name are required.";return;}
+  err.textContent="Checking…";
+  try{
+    const r=await fetch("/api/login",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({pass})});
+    const d=await r.json();
+    if(!d.ok){err.textContent=d.error||"Passcode not recognised.";return;}
+    PASS=pass;WHO=name;
+    try{localStorage.setItem("lex-pass",pass);localStorage.setItem("lex-who",name);}catch(e){}
+    document.getElementById("gate").style.display="none";
+    document.getElementById("app").style.display="flex";
+    S.settings.name=name;
+    document.getElementById("whoLbl").textContent=name;
+    await pullState(false);
+    startPolling();
+    show("dash");
+  }catch(e){err.textContent="Could not reach the server: "+e.message;}
+}
+function signOut(){
+  try{localStorage.removeItem("lex-pass");localStorage.removeItem("lex-who");}catch(e){}
+  location.reload();
+}
+async function restoreCache(){
+  let p="",n="";
+  try{p=localStorage.getItem("lex-pass")||"";n=localStorage.getItem("lex-who")||"";}catch(e){}
+  if(p&&n){
+    document.getElementById("gatePass").value=p;
+    document.getElementById("gateName").value=n;
+    await doLogin();
+  }
+}
+function solsFromString(str,role){return String(str||"").split(/;|,/).map(x=>x.trim()).filter(Boolean).map((n,i)=>({name:n,role:i===0?(role||""):""}));}
+function migrate(s){
+  const b=blankState();const st=Object.assign(b,s,{settings:Object.assign(b.settings,s.settings||{})});
+  (st.firms||[]).forEach(f=>{f.aes=(f.aes||[]).filter(a=>!AE_NA.test(String(a).trim()));});
+  const upFirm=f=>{
+    if(!f.sols){f.sols=solsFromString(f.lawyers,f.role);if(!f.sols.length&&val(f.role))f.sols=[{name:"",role:f.role}];}
+    if(f.actsFor===undefined)f.actsFor="";};
+  (st.drafts||[]).forEach(d=>{["clm","def"].forEach(k=>{const sd=d[k];if(!sd)return;(sd.firms||[]).forEach(upFirm);
+    if(sd.inHouseName===undefined){sd.inHouseName=sd.inHouse||"";sd.inHouseRole="";}});});
+  (st.leads||[]).forEach(l=>{if(!l.sols)l.sols=solsFromString(l.solicitors,l.role);if(l.actsFor===undefined)l.actsFor="";});
+  return st;
+}
+
+function show(view){
+  document.querySelectorAll(".view").forEach(v=>v.classList.remove("on"));
+  document.getElementById("v-"+view).classList.add("on");
+  document.querySelectorAll("#nav button").forEach(b=>b.classList.toggle("on",b.dataset.v===view));
+  if(view==="dash")renderDash();
+  if(view==="review")renderDrafts();
+  if(view==="leads")renderLeads();
+  if(view==="firms")renderFirms();
+  if(view==="reports")renderReports();
+  if(view==="data")renderData();
+}
+function renderNav(){
+  document.getElementById("nav").innerHTML = NAV.map(([v,l,cnt])=>{
+    const n=cnt?cnt():null;
+    return `<button data-v="${v}" onclick="show('${v}')">${l}${n?`<span class="n ${v==='review'&&n?'hot':''}">${n}</span>`:""}</button>`;
+  }).join("");
+}
+function refreshNav(){renderNav();const on=document.querySelector(".view.on");if(on)document.querySelectorAll("#nav button").forEach(b=>b.classList.toggle("on","v-"+b.dataset.v===on.id));}
+
+/* ============ firm normalisation & matching ============ */
+function normFirm(s){
+  return String(s||"").toLowerCase()
+    .replace(/&/g," and ")
+    .replace(/[^a-z0-9 ]/g," ")
+    .replace(/\b(llp|llc|ltd|limited|plc|lp|the|uk|solicitors|solicitor|law firm|lawyers|legal)\b/g," ")
+    .replace(/\s+/g," ").trim();
+}
+function matchFirm(name){
+  const n=normFirm(name); if(!n)return null;
+  for(const f of S.firms){
+    if(normFirm(f.canonical)===n)return f;
+    if((f.aliases||[]).some(a=>normFirm(a)===n))return f;
+  }
+  return null;
+}
+const AE_NA=/^(n\/?a|na|n|a|unassigned|none|tbc|-{1,3}|\?+)$/i;
+function splitAEs(s){return String(s||"").split(/[\/,&+]| and /i).map(x=>x.trim()).filter(x=>x&&!AE_NA.test(x));}
+
+/* ============ firms tab ============ */
+function importFirmsXlsx(file){
+  if(!file)return;
+  const r=new FileReader();
+  r.onload=e=>{
+    try{
+      const wb=XLSX.read(new Uint8Array(e.target.result),{type:"array"});
+      const sheet=wb.Sheets["Firms"]||wb.Sheets[wb.SheetNames.find(n=>/firm/i.test(n))]||wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(sheet,{header:1,defval:""});
+      let added=0,merged=0;
+      const take=(name,ae)=>{
+        name=String(name||"").trim(); if(!name||/^firm name$/i.test(name)||/^law firm$/i.test(name))return;
+        const aes=splitAEs(ae);
+        const ex=matchFirm(name);
+        if(ex){ // merge AEs, keep alias if display differs
+          aes.forEach(a=>{if(!ex.aes.some(x=>x.toLowerCase()===a.toLowerCase()))ex.aes.push(a);});
+          if(ex.canonical.toLowerCase()!==name.toLowerCase() && !(ex.aliases||[]).some(a=>a.toLowerCase()===name.toLowerCase()))ex.aliases.push(name);
+          merged++;
+        }else{
+          S.firms.push({id:uid(),canonical:name,aliases:[],aes,type:/chambers/i.test(name)?"Chambers":"Solicitors",notes:""});
+          added++;
+        }
+      };
+      // table 1: cols A,B  |  table 2: cols D,E (embedded second table)
+      rows.forEach(row=>{take(row[0],row[1]);take(row[3],row[4]);});
+      S.firms.sort((a,b)=>a.canonical.localeCompare(b.canonical));
+      logAct(`Firms import: ${added} added, ${merged} merged from ${file.name}`);
+      markDirty();renderFirms();refreshNav();
+      toast(`Firms imported: ${added} added, ${merged} merged. Chambers auto-tagged and excluded from assignment.`);
+    }catch(err){toast("Could not read that workbook: "+err.message,true);}
+  };
+  r.readAsArrayBuffer(file);
+}
+function addFirm(){S.firms.unshift({id:uid(),canonical:"New firm",aliases:[],aes:[],type:"Solicitors",notes:""});markDirty();renderFirms();}
+function renderFirms(){
+  const q=(document.getElementById("firmSearch").value||"").toLowerCase();
+  const rows=S.firms.filter(f=>!q||f.canonical.toLowerCase().includes(q)||(f.aliases||[]).join(" ").toLowerCase().includes(q)||(f.aes||[]).join(" ").toLowerCase().includes(q));
+  document.getElementById("firmsBody").innerHTML=rows.map(f=>`<tr>
+    <td><input value="${esc(f.canonical)}" onchange="updFirm('${f.id}','canonical',this.value)" style="width:100%;min-width:160px"></td>
+    <td><input value="${esc((f.aliases||[]).join("; "))}" placeholder="alias; alias" onchange="updFirm('${f.id}','aliases',this.value)" style="width:100%;min-width:140px"></td>
+    <td><input value="${esc((f.aes||[]).join(", "))}" placeholder="Unassigned" onchange="updFirm('${f.id}','aes',this.value)" style="width:100%;min-width:110px"></td>
+    <td><select onchange="updFirm('${f.id}','type',this.value)">${["Solicitors","Chambers","Corporation","Other"].map(t=>`<option ${f.type===t?"selected":""}>${t}</option>`).join("")}</select></td>
+    <td><button class="btn danger sm" onclick="delFirm('${f.id}')">Delete</button></td>
+  </tr>`).join("")||`<tr><td colspan="5" class="muted">No firms yet. Import your roundup workbook to build the mapping.</td></tr>`;
+}
+function updFirm(id,k,v){const f=S.firms.find(x=>x.id===id);if(!f)return;
+  if(k==="aliases")f.aliases=v.split(";").map(x=>x.trim()).filter(Boolean);
+  else if(k==="aes")f.aes=v.split(",").map(x=>x.trim()).filter(Boolean);
+  else f[k]=v;
+  markDirty();}
+function delFirm(id){S.firms=S.firms.filter(f=>f.id!==id);markDirty();renderFirms();refreshNav();}
+
+/* ============ extraction ============ */
+const CLAIM_RX=/^([A-Z]{1,3}-\d{4}-\d{4,6})/;
+let staged=[]; let solomonic=[];
+pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+const dz=document.getElementById("dropzone");
+["dragover","dragenter"].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add("over");}));
+["dragleave","drop"].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove("over");}));
+dz.addEventListener("drop",e=>stageFiles(e.dataTransfer.files));
+document.getElementById("fileInput").addEventListener("change",e=>stageFiles(e.target.files));
+
+function stageFiles(list){
+  for(const f of list){
+    if(/\.csv$/i.test(f.name)){loadSolomonic(f);continue;}
+    if(!/\.(pdf|txt|md)$/i.test(f.name))continue;
+    if(!staged.some(s=>s.name===f.name))staged.push({name:f.name,file:f});
+  }
+  renderStaged();
+}
+function renderStaged(){
+  const groups=groupStaged();
+  document.getElementById("stagedFiles").innerHTML = staged.length ?
+    Object.entries(groups).map(([k,fs])=>`<div style="margin:4px 0"><span class="docket">${esc(k)}</span> &nbsp;${fs.map(f=>esc(f.name)).join(" &nbsp;+&nbsp; ")} <button class="btn ghost sm" onclick="unstage('${esc(k)}')">remove</button></div>`).join("")
+    : "";
+  document.getElementById("runBtn").disabled=!staged.length;
+}
+function groupStaged(){
+  const g={};
+  staged.forEach(f=>{const m=f.name.match(CLAIM_RX);const k=m?m[1]:f.name;(g[k]=g[k]||[]).push(f);});
+  return g;
+}
+function unstage(k){const m=k.match(CLAIM_RX);staged=staged.filter(f=>{const fm=f.name.match(CLAIM_RX);return (fm?fm[1]:f.name)!==k;});renderStaged();}
+
+function loadSolomonic(file){
+  Papa.parse(file,{header:true,skipEmptyLines:true,complete:res=>{
+    solomonic=res.data;
+    document.getElementById("solomonicLbl").textContent=`Solomonic loaded: ${solomonic.length} claims (${file.name})`;
+    toast("Solomonic CSV loaded — will reconcile during extraction.");
+  }});
+}
+function solomonicFor(claimNo){
+  const n=String(claimNo||"").toUpperCase().trim();
+  return solomonic.find(r=>String(r["Claim number"]||"").toUpperCase().trim()===n)||null;
+}
+
+async function fileText(f){
+  if(/\.pdf$/i.test(f.name)){
+    const buf=await f.file.arrayBuffer();
+    const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+    let out=[];
+    for(let p=1;p<=pdf.numPages;p++){
+      const page=await pdf.getPage(p);
+      const tc=await page.getTextContent();
+      out.push(tc.items.map(i=>i.str).join(" "));
+    }
+    return out.join("\n\n");
+  }
+  return await f.file.text();
+}
+function headTail(text,limit){
+  if(text.length<=limit)return text;
+  const h=Math.floor(limit*0.6),t=limit-h;
+  return text.slice(0,h)+"\n\n[... middle of document omitted ...]\n\n"+text.slice(-t);
+}
+
+function prog(msg){const p=document.getElementById("progLog");p.style.display="block";p.textContent+=msg+"\n";p.scrollTop=p.scrollHeight;}
+
+async function runExtraction(){
+  const cycle=(document.getElementById("cycleLbl").value||"").trim();
+  if(!cycle){toast("Set a cycle label first — it stamps every claim in this run.",true);return;}
+  document.getElementById("runBtn").disabled=true;
+  document.getElementById("progLog").textContent="";
+  const groups=groupStaged();
+  const perDoc=Math.floor(46000/Math.max(1,Math.max(...Object.values(groups).map(g=>g.length))));
+  for(const [key,files] of Object.entries(groups)){
+    prog(`▸ ${key} — reading ${files.length} file(s)`);
+    try{
+      let combined="";
+      for(const f of files){
+        const t=await fileText(f);
+        combined+=`\n\n===== FILE: ${f.name} =====\n`+headTail(t,Math.min(perDoc,24000));
+      }
+      const m=key.match(CLAIM_RX);
+      const claimNo=m?m[1]:null;
+      prog(`  extracting…`);
+      const ex=await claudeExtract(combined,claimNo,files.map(f=>f.name));
+      const draft=makeDraft(ex,claimNo,files.map(f=>f.name),cycle);
+      reconcile(draft);
+      checkExisting(draft);
+      S.drafts.push(draft);
+      prog(`  ✓ drafted${draft.conflicts.length?` — ${draft.conflicts.length} conflict(s) to resolve`:""}`);
+    }catch(err){
+      prog(`  ✗ failed: ${err.message}`);
+      S.drafts.push({id:uid(),failed:true,error:err.message,files:files.map(f=>f.name),claimNumber:key,cycle,type:"Court",conflicts:[],flags:[]});
+    }
+    markDirty();refreshNav();
+  }
+  staged=[];renderStaged();
+  prog("Done. Review drafts before publishing.");
+  toast("Extraction complete — drafts are in Review.");
+  document.getElementById("runBtn").disabled=false;
+}
+
+async function claudeExtract(text,claimNo,filenames){
+  const sys=`You extract structured data from UK litigation filings for a legal-tech sales tracker. Respond ONLY with a single JSON object, no markdown fences, no preamble.
+Rules:
+- citation format exactly "[Claim number]: Claimant v Defendant". Use the claim number found in the documents; if none is present use "${claimNo||"NONE"}" from the filename and set citationFromFilename true. NEVER invent a claim number.
+- date: the claim form signature date (including split Day/Month/Year boxes), format DD/MM/YYYY. If absent use "".
+- value: abbreviated (e.g. "£2.3M", "£450K"). "" if not stated.
+- topics: exactly 3 short keywords.
+- summary: three short paragraphs, under 200 words total, separated by \\n\\n. Factual, no speculation.
+- SOLICITORS ONLY — never barristers, counsel, KCs, QCs or chambers. Look ONLY in: (1) the statement of truth / signature block on the final pages of particulars or defence; (2) the claim form email address box (convert email addresses to likely names). List the signatory first. One sols entry per solicitor, each with their own role from the "position or office held" field ("" if not stated for that person).
+- Where a side has multiple parties, list them numbered in the party field: "(1) First Party; (2) Second Party". For each firm, actsFor MUST state which numbered part(y/ies) it acts for, e.g. "(1)" or "(1), (3)", or "All" if one firm acts for the whole side. Determine this from: signature blocks ("solicitor for the First/Second Defendant"), which party's defence or acknowledgment of service the firm signed, the claim form legal representative box (acts for the claimant(s)), and document headings. Use "" only if genuinely indeterminable — never guess.
+- In-house contact: if the claim form or statement of truth is signed by an officer of the party itself — per the "position or office held" field, e.g. Director, General Counsel, Head of Legal, Company Secretary, CEO — that signatory goes in the InHouseName and InHouseRole fields for that side, NEVER in sols. sols contain only solicitors at external law firms.
+- Use "" for anything genuinely absent. NEVER invent lawyers, firms, values, roles or parties.
+JSON shape:
+{"caseTitle":"","citation":"","citationFromFilename":false,"date":"","value":"","topics":["","",""],"summary":"","claimant":"","clmFirms":[{"firm":"","actsFor":"","sols":[{"name":"","role":""}]}],"clmInHouseName":"","clmInHouseRole":"","defendant":"","defFirms":[{"firm":"","actsFor":"","sols":[{"name":"","role":""}]}],"defInHouseName":"","defInHouseRole":""}`;
+  const resp=await api("claude",{method:"POST",body:{model:"claude-sonnet-4-6",max_tokens:1000,system:sys,messages:[{role:"user",content:`Filenames: ${filenames.join(", ")}\n\nDocuments:\n${text}`}]}});
+  const data=await resp.json();
+  if(data.error)throw new Error(data.error.message||"API error");
+  const raw=(data.content||[]).filter(c=>c.type==="text").map(c=>c.text).join("");
+  const clean=raw.replace(/```json|```/g,"").trim();
+  return JSON.parse(clean);
+}
+
+function mkSide(party,firms,ihName,ihRole){
+  const fs=(firms||[]).map(f=>({firm:val(f.firm),actsFor:val(f.actsFor),
+    sols:(f.sols&&f.sols.length?f.sols:solsFromString(f.lawyers,f.role)).map(x=>({name:val(x.name),role:val(x.role)})).filter(x=>x.name||x.role)}))
+    .filter(f=>f.firm||f.sols.length);
+  return {party:party||"",firms:fs,inHouseName:val(ihName),inHouseRole:val(ihRole)};
+}
+function makeDraft(ex,claimNo,files,cycle){
+  return {id:uid(),type:"Court",cycle,files,failed:false,
+    claimNumber:claimNo||(ex.citation.match(/^([A-Z]{1,3}-\d{4}-\d{4,6})/)||[])[1]||"",
+    caseTitle:ex.caseTitle||"",citation:ex.citation||"",citationFromFilename:!!ex.citationFromFilename,
+    date:ex.date||"",value:ex.value||"",topics:(ex.topics||[]).join(", "),summary:ex.summary||"",
+    clm:mkSide(ex.claimant,ex.clmFirms,ex.clmInHouseName??ex.clmInHouse,ex.clmInHouseRole),
+    def:mkSide(ex.defendant,ex.defFirms,ex.defInHouseName??ex.defInHouse,ex.defInHouseRole),
+    conflicts:[],flags:[],provenance:[]};
+}
+
+/* ---- Solomonic reconciliation: fill blanks, surface substantive conflicts ---- */
+function reconcile(d){
+  const row=solomonicFor(d.claimNumber);
+  if(!row){if(solomonic.length)d.flags.push("No Solomonic match for this claim number");return;}
+  // title cross-check
+  const sTitle=val(row["Claim title"]);
+  if(sTitle&&val(d.caseTitle)&&looseDiff(d.caseTitle,sTitle))
+    d.conflicts.push(mkConflict("caseTitle","Case title",d.caseTitle,sTitle));
+  const fill=(field,label,sVal)=>{
+    sVal=val(sVal); if(!sVal)return;
+    const cur=val(d[field]);
+    if(!cur){d[field]=sVal;d.provenance.push(`${label} filled from Solomonic`);}
+    else if(looseDiff(cur,sVal))d.conflicts.push(mkConflict(field,label,cur,sVal));
+  };
+  fill("value","Value",row["Value"]);
+  fill("date","Date",fmtDate(row["Issue date"]));
+  fillSide(d,"clm",row,"Claimants/Appellants","Claimant law firms","Claimant solicitors");
+  fillSide(d,"def",row,"Defendants/Respondents","Defendant law firms","Defendant solicitors");
+}
+function fillSide(d,side,row,pCol,fCol,sCol){
+  const S_=d[side];const lbl=side==="clm"?"Claimant":"Defendant";
+  let sParty=val(row[pCol]);
+  if(sParty&&sParty.includes(",")&&!/\(\d+\)/.test(sParty))
+    sParty=sParty.split(",").map((p,i)=>`(${i+1}) ${p.trim()}`).join("; ");
+  const deNum=x=>String(x).replace(/\(\d+\)/g,"");
+  if(sParty){ if(!val(S_.party)){S_.party=sParty;d.provenance.push(`${lbl} party from Solomonic`);}
+    else if(looseDiff(deNum(S_.party),deNum(sParty)))d.conflicts.push(mkConflict(side+".party",lbl+" party",S_.party,sParty)); }
+  const sFirms=val(row[fCol]).split(/;|,(?![^()]*\))/).map(x=>x.trim()).filter(Boolean);
+  const sSols=val(row[sCol]);
+  if(!S_.firms.length&&sFirms.length){
+    S_.firms=sFirms.map((f,i)=>({firm:f,actsFor:"",sols:i===0?solsFromString(sSols):[]}));
+    d.provenance.push(`${lbl} firm(s) from Solomonic`);
+  }else if(S_.firms.length&&sFirms.length){
+    sFirms.forEach(f=>{ if(!S_.firms.some(x=>normFirm(x.firm)===normFirm(f))){S_.firms.push({firm:f,actsFor:"",sols:[]});d.provenance.push(`${lbl} firm added from Solomonic: ${f}`);} });
+    if(sSols&&!S_.firms.some(x=>x.sols.length))S_.firms[0].sols=solsFromString(sSols);
+  }
+}
+function mkConflict(field,label,extracted,solomonicVal){return {id:uid(),field,label,extracted,solomonic:solomonicVal,chosen:null};}
+function looseDiff(a,b){
+  const n=s=>String(s).toLowerCase().replace(/[^a-z0-9]/g,"");
+  return n(a)!==n(b);
+}
+function fmtDate(s){
+  s=val(s); if(!s)return "";
+  const m=s.match(/^(\d{4})-(\d{2})-(\d{2})/); if(m)return `${m[3]}/${m[2]}/${m[1]}`;
+  return s;
+}
+function checkExisting(d){
+  if(!d.claimNumber)return;
+  const ex=S.claims.find(c=>c.claimNumber.toUpperCase()===d.claimNumber.toUpperCase());
+  if(ex){d.updateOf=ex.id;d.flags.push("Already published — publishing will update the claim and add only NEW firms as leads");}
+  const dupDraft=S.drafts.filter(x=>x.claimNumber===d.claimNumber).length;
+  if(dupDraft)d.flags.push("Duplicate claim number in current drafts");
+}
+
+/* ---- intelligence leads ---- */
+async function extractIntelligence(){
+  const t=document.getElementById("intText").value.trim();
+  const cycle=(document.getElementById("cycleLbl").value||"").trim();
+  if(!t){toast("Paste the article text first.",true);return;}
+  if(!cycle){toast("Set a cycle label first.",true);return;}
+  toast("Extracting intelligence lead…");
+  try{
+    const sys=`Extract sales intelligence from a legal news article. Respond ONLY with JSON, no fences.
+Rules: never invent a court claim number, names, firms or values. SOLICITORS and law firms only, no barristers/chambers. "" where absent. Summary: two short paragraphs under 120 words.
+Shape: {"caseTitle":"","date":"","value":"","topics":["","",""],"summary":"","claimant":"","clmFirms":[{"firm":"","actsFor":"","sols":[{"name":"","role":""}]}],"defendant":"","defFirms":[{"firm":"","actsFor":"","sols":[{"name":"","role":""}]}]}`;
+    const resp=await api("claude",{method:"POST",body:{model:"claude-sonnet-4-6",max_tokens:1000,system:sys,messages:[{role:"user",content:t.slice(0,30000)}]}});
+    const data=await resp.json();
+    if(data.error)throw new Error(data.error.message);
+    const ex=JSON.parse((data.content||[]).filter(c=>c.type==="text").map(c=>c.text).join("").replace(/```json|```/g,"").trim());
+    const yr=new Date().getFullYear();
+    S.settings.intCounter[yr]=(S.settings.intCounter[yr]||0)+1;
+    const ref=`INT-${yr}-${String(S.settings.intCounter[yr]).padStart(3,"0")}`;
+    const d=makeDraft(Object.assign(ex,{citation:`${ref}: ${ex.caseTitle||"Intelligence lead"}`}),null,["(news article)"],cycle);
+    d.type="Intelligence";d.claimNumber=ref;
+    S.drafts.push(d);
+    document.getElementById("intText").value="";
+    markDirty();refreshNav();
+    toast(`Intelligence draft ${ref} created — see Review.`);
+  }catch(err){toast("Intelligence extraction failed: "+err.message,true);}
+}
+
+/* ============ review & publish ============ */
+function renderDrafts(){
+  const el=document.getElementById("draftList");
+  if(!S.drafts.length){el.innerHTML=`<div class="card muted">No drafts. Run an extraction to create some.</div>`;return;}
+  el.innerHTML=S.drafts.map(d=>d.failed?`
+    <div class="claimcard"><div class="head"><span class="docket">${esc(d.claimNumber)}</span>
+      <span class="title" style="color:var(--bad)">Extraction failed</span><span class="pill red">Error</span>
+      <button class="btn danger sm" onclick="event.stopPropagation();dropDraft('${d.id}')">Discard</button></div>
+      <div class="body" style="display:block"><p class="small">${esc(d.error)} — files: ${esc(d.files.join(", "))}. Re-stage the files in Extract to retry.</p></div></div>`
+  :`
+  <div class="claimcard ${d._open?"open":""}" id="dc-${d.id}">
+    <div class="head" onclick="toggleDraft('${d.id}')">
+      <span class="docket ${d.type==="Intelligence"?"int":""}">${esc(d.claimNumber||"NO CLAIM №")}</span>
+      <span class="title">${esc(d.caseTitle||"Untitled")}</span>
+      ${d.citationFromFilename?`<span class="pill amber">Citation from filename</span>`:""}
+      ${d.conflicts.filter(c=>!c.chosen).length?`<span class="pill red">${d.conflicts.filter(c=>!c.chosen).length} conflict(s)</span>`:""}
+      ${d.updateOf?`<span class="pill navy">Update</span>`:""}
+      ${d.flags.length&&!d.updateOf?`<span class="pill amber">Flagged</span>`:""}
+      <span class="pill grey">${esc(d.cycle)}</span>
+    </div>
+    <div class="body">
+      ${d.flags.map(f=>`<p class="small" style="color:var(--warn);margin-bottom:6px">⚠ ${esc(f)}</p>`).join("")}
+      ${d.provenance.length?`<p class="small muted" style="margin-bottom:8px">Solomonic: ${esc(d.provenance.join("; "))}</p>`:""}
+      ${d.conflicts.filter(c=>!c.chosen).map(c=>`
+        <div class="conflict"><strong class="small">${esc(c.label)} — pick the value to keep</strong>
+          <div class="opts">
+            <div class="opt" onclick="pickConflict('${d.id}','${c.id}','extracted')"><span class="src">Extracted from filings</span>${esc(c.extracted)}</div>
+            <div class="opt" onclick="pickConflict('${d.id}','${c.id}','solomonic')"><span class="src">Solomonic</span>${esc(c.solomonic)}</div>
+          </div></div>`).join("")}
+      <div class="fieldgrid" style="margin-bottom:10px">
+        <div><label>Case title</label><input value="${esc(d.caseTitle)}" onchange="updDraft('${d.id}','caseTitle',this.value)"></div>
+        <div><label>Citation</label><input value="${esc(d.citation)}" onchange="updDraft('${d.id}','citation',this.value)"></div>
+        <div><label>Date</label><input value="${esc(d.date)}" onchange="updDraft('${d.id}','date',this.value)"></div>
+        <div><label>Value</label><input value="${esc(d.value)}" onchange="updDraft('${d.id}','value',this.value)"></div>
+        <div><label>Topics</label><input value="${esc(d.topics)}" onchange="updDraft('${d.id}','topics',this.value)"></div>
+      </div>
+      <div class="stack"><label>Summary</label><textarea rows="5" onchange="updDraft('${d.id}','summary',this.value)">${esc(d.summary)}</textarea></div>
+      ${sideBox(d,"clm","Claimant side")}
+      ${sideBox(d,"def","Defendant side")}
+      <div class="row" style="margin-top:12px">
+        <button class="btn orange" onclick="publishDraft('${d.id}')" ${d.conflicts.some(c=>!c.chosen)?"disabled":""}>Publish${d.updateOf?" update":""}</button>
+        <button class="btn danger" onclick="dropDraft('${d.id}')">Discard draft</button>
+        ${d.conflicts.some(c=>!c.chosen)?`<span class="small muted">Resolve conflicts to enable publishing.</span>`:""}
+      </div>
+    </div>
+  </div>`).join("");
+}
+const IH_RX=/\b(director|general counsel|head of legal|chief legal|company secretary|ceo|cfo|coo|chairman|chair|chief executive|managing director|in.house)\b/i;
+function solToInHouse(id,side,i,j){
+  const d=S.drafts.find(x=>x.id===id);const sd=d[side];
+  const sol=sd.firms[i].sols[j];
+  if(val(sd.inHouseName)&&sd.inHouseName!==sol.name){toast("In-house contact already set to "+sd.inHouseName+" — clear it first if "+sol.name+" should replace them.",true);return;}
+  sd.inHouseName=sol.name;sd.inHouseRole=sol.role;
+  sd.firms[i].sols.splice(j,1);
+  d.provenance.push(`${sol.name} moved from representation to in-house contact`);
+  d._open=true;markDirty();renderDrafts();
+}
+function updSol(id,side,i,j,k,v){const d=S.drafts.find(x=>x.id===id);d[side].firms[i].sols[j][k]=v;d._open=true;markDirty();}
+function addSol(id,side,i){const d=S.drafts.find(x=>x.id===id);d[side].firms[i].sols.push({name:"",role:""});d._open=true;markDirty();renderDrafts();}
+function rmSol(id,side,i,j){const d=S.drafts.find(x=>x.id===id);d[side].firms[i].sols.splice(j,1);d._open=true;markDirty();renderDrafts();}
+function partySegments(str){
+  const out=[];const rx=/\((\d+)\)\s*([^()]*?)(?=\s*\(\d+\)|$)/g;let m;
+  while((m=rx.exec(String(str||""))))out.push({n:+m[1],name:m[2].replace(/[;,]\s*$/,"").trim()});
+  return out;
+}
+function actsForHas(a,n){return new RegExp("\\("+n+"\\)").test(a||"");}
+function toggleActsFor(id,side,i,n){
+  const d=S.drafts.find(x=>x.id===id);const f=d[side].firms[i];
+  if(n==="All"){f.actsFor=f.actsFor==="All"?"":"All";}
+  else{
+    let ns=(String(f.actsFor||"").match(/\d+/g)||[]).map(Number);
+    if(f.actsFor==="All")ns=[];
+    ns=ns.includes(n)?ns.filter(x=>x!==n):ns.concat(n);
+    f.actsFor=ns.sort((a,b)=>a-b).map(x=>"("+x+")").join(", ");
+  }
+  d._open=true;markDirty();renderDrafts();
+}
+function sideBox(d,side,label){
+  const sd=d[side];
+  const firmRows=sd.firms.map((f,i)=>{
+    const m=matchFirm(f.firm);
+    const excl=m&&m.type==="Chambers";
+    const solRows=(f.sols||[]).map((sol,j)=>`
+      <div class="row" style="margin:3px 0 3px 14px">
+        <input value="${esc(sol.name)}" placeholder="Solicitor" onchange="updSol('${d.id}','${side}',${i},${j},'name',this.value)" style="min-width:160px">
+        <input value="${esc(sol.role)}" placeholder="Role (position or office held)" onchange="updSol('${d.id}','${side}',${i},${j},'role',this.value)" style="min-width:180px">
+        ${IH_RX.test(sol.role||"")?`<span class="pill amber">Looks in-house</span> <button class="btn ghost sm" onclick="solToInHouse('${d.id}','${side}',${i},${j})">Move to in-house</button>`:""}
+        <button class="btn ghost sm" onclick="rmSol('${d.id}','${side}',${i},${j})">×</button>
+      </div>`).join("");
+    return `<div style="border:1px solid var(--line);border-radius:5px;padding:8px;margin:6px 0;background:#fff">
+      <div class="row">
+        <input value="${esc(f.firm)}" placeholder="Firm" onchange="updSideFirm('${d.id}','${side}',${i},'firm',this.value)" style="min-width:180px;font-weight:600">
+        ${(()=>{const segs=partySegments(sd.party);
+          if(segs.length>1)return `<span class="small muted">Acts for:</span> `+segs.map(sg=>`<button class="chip ${actsForHas(f.actsFor,sg.n)?"on":""}" title="${esc(sg.name)}" onclick="toggleActsFor('${d.id}','${side}',${i},${sg.n})">(${sg.n})</button>`).join("")+`<button class="chip ${f.actsFor==="All"?"on":""}" onclick="toggleActsFor('${d.id}','${side}',${i},'All')">All</button>`;
+          return `<input value="${esc(f.actsFor||"")}" placeholder="Acts for e.g. (1), (2)" onchange="updSideFirm('${d.id}','${side}',${i},'actsFor',this.value)" style="width:150px" class="mono">`;})()}
+        ${excl?`<span class="pill amber">Chambers — no lead</span>`
+          :m?`<span class="pill green" title="${esc(m.canonical)}">AE: ${esc(m.aes.join(", ")||"Unassigned")}</span>`
+          :val(f.firm)?`<span class="pill orange">Unmapped → claimable</span> <button class="btn ghost sm" onclick="quickMap('${d.id}','${side}',${i})">Map firm</button>`:""}
+        <button class="btn ghost sm" onclick="rmSideFirm('${d.id}','${side}',${i})">Remove firm</button>
+      </div>
+      ${solRows||`<p class="small muted" style="margin:4px 0 0 14px">No solicitors extracted for this firm.</p>`}
+      <button class="btn ghost sm" style="margin:5px 0 0 14px" onclick="addSol('${d.id}','${side}',${i})">Add solicitor</button>
+    </div>`;
+  }).join("");
+  return `<div class="sidebox"><h4>${label}</h4>
+    <div class="stack"><label>Parties — number multiples as (1) … (2) …</label>
+      <input value="${esc(sd.party)}" onchange="updSide('${d.id}','${side}','party',this.value)" style="width:100%"></div>
+    <div class="row" style="margin-bottom:6px">
+      <div class="grow"><label class="small muted" style="display:block;text-transform:uppercase;font-size:11px;letter-spacing:.04em;color:var(--slate)">In-house contact — name</label>
+        <input value="${esc(sd.inHouseName||"")}" onchange="updSide('${d.id}','${side}','inHouseName',this.value)" style="width:100%"></div>
+      <div class="grow"><label class="small muted" style="display:block;text-transform:uppercase;font-size:11px;letter-spacing:.04em;color:var(--slate)">In-house contact — role</label>
+        <input value="${esc(sd.inHouseRole||"")}" onchange="updSide('${d.id}','${side}','inHouseRole',this.value)" style="width:100%"></div>
+    </div>
+    <h4 style="margin-top:10px">Representation — which firm acts for which party</h4>
+    ${firmRows||`<p class="small muted">No firm identified — publishing creates one unassigned lead for this side.</p>`}
+    <button class="btn ghost sm" style="margin-top:6px" onclick="addSideFirm('${d.id}','${side}')">Add firm</button>
+  </div>`;
+}
+function toggleDraft(id){const d=S.drafts.find(x=>x.id===id);d._open=!d._open;renderDrafts();}
+function updDraft(id,k,v){const d=S.drafts.find(x=>x.id===id);d[k]=v;markDirty();}
+function updSide(id,side,k,v){const d=S.drafts.find(x=>x.id===id);d[side][k]=v;markDirty();}
+function updSideFirm(id,side,i,k,v){const d=S.drafts.find(x=>x.id===id);d[side].firms[i][k]=v;markDirty();renderDrafts();}
+function addSideFirm(id,side){const d=S.drafts.find(x=>x.id===id);d[side].firms.push({firm:"",actsFor:"",sols:[]});d._open=true;markDirty();renderDrafts();}
+function rmSideFirm(id,side,i){const d=S.drafts.find(x=>x.id===id);d[side].firms.splice(i,1);d._open=true;markDirty();renderDrafts();}
+function pickConflict(did,cid,which){
+  const d=S.drafts.find(x=>x.id===did);const c=d.conflicts.find(x=>x.id===cid);
+  c.chosen=which;
+  const win=which==="extracted"?c.extracted:c.solomonic;
+  if(c.field.includes(".")){const [s,k]=c.field.split(".");d[s][k]=win;}else d[c.field]=win;
+  d.provenance.push(`${c.label}: kept ${which} value ("${win}"), rejected "${which==="extracted"?c.solomonic:c.extracted}"`);
+  d._open=true;markDirty();renderDrafts();
+}
+function quickMap(did,side,i){
+  const d=S.drafts.find(x=>x.id===did);const f=d[side].firms[i];
+  const aes=prompt(`Map "${f.firm}" — enter AE owner(s), comma-separated, or leave blank for Available to Claim:`);
+  if(aes===null)return;
+  S.firms.push({id:uid(),canonical:f.firm.trim(),aliases:[],aes:aes.split(",").map(x=>x.trim()).filter(Boolean),type:"Solicitors",notes:"Added at review"});
+  S.firms.sort((a,b)=>a.canonical.localeCompare(b.canonical));
+  d._open=true;markDirty();renderDrafts();refreshNav();
+}
+function dropDraft(id){S.drafts=S.drafts.filter(d=>d.id!==id);markDirty();renderDrafts();refreshNav();}
+
+function publishDraft(id){
+  const d=S.drafts.find(x=>x.id===id);
+  let claim;
+  if(d.updateOf){
+    claim=S.claims.find(c=>c.id===d.updateOf);
+    ["caseTitle","citation","date","value","topics","summary"].forEach(k=>{if(val(d[k]))claim[k]=d[k];});
+    claim.status="Updated";claim.provenance=(claim.provenance||[]).concat(d.provenance,[`Updated ${today()} from cycle ${d.cycle}`]);
+    logAct(`Updated claim ${claim.claimNumber}`);
+  }else{
+    claim={id:uid(),claimNumber:d.claimNumber,type:d.type,cycle:d.cycle,caseTitle:d.caseTitle,citation:d.citation,
+      citationFromFilename:d.citationFromFilename,date:d.date,value:d.value,topics:d.topics,summary:d.summary,
+      clmParty:d.clm.party,defParty:d.def.party,clmInHouse:[val(d.clm.inHouseName),val(d.clm.inHouseRole)].filter(Boolean).join(" — "),defInHouse:[val(d.def.inHouseName),val(d.def.inHouseRole)].filter(Boolean).join(" — "),
+      status:"Published",publishedAt:today(),provenance:d.provenance,files:d.files};
+    S.claims.push(claim);
+    logAct(`Published claim ${claim.claimNumber} (${d.cycle})`);
+  }
+  // leads: one per firm per side; skip chambers; skip firms already leading on this claim+side
+  const solsDisp=sols=>(sols||[]).map(x=>x.role?`${x.name} (${x.role})`:x.name).filter(Boolean).join("; ");
+  const rolesDisp=sols=>[...new Set((sols||[]).map(x=>val(x.role)).filter(Boolean))].join("; ");
+  const mkLeads=(side,tag)=>{
+    const sd=d[side];
+    const ih=[val(sd.inHouseName),val(sd.inHouseRole)].filter(Boolean).join(" — ");
+    const firms=sd.firms.filter(f=>{const m=matchFirm(f.firm);return val(f.firm)&&!(m&&m.type==="Chambers");});
+    const existing=S.leads.filter(l=>l.claimId===claim.id&&l.sideTag===tag);
+    const entries=firms.length?firms:(d.type==="Intelligence"&&side==="def"?[]:[{firm:"",actsFor:"",sols:[]}]);
+    entries.forEach(f=>{
+      if(f.firm&&existing.some(l=>normFirm(l.firmDisplay)===normFirm(f.firm)))return; // update run: firm already has a lead
+      if(!f.firm&&existing.length)return;
+      let m=f.firm?matchFirm(f.firm):null;
+      let disp=f.firm||"No firm identified (in-house / LiP)";
+      if(!f.firm){ // direct corporate relationship: match the party against Corporation records
+        const pm=matchFirm(sd.party);
+        if(pm&&pm.type==="Corporation"){m=pm;disp=`${pm.canonical} (direct client)`;}
+      }
+      const seq=S.leads.filter(l=>l.claimId===claim.id&&l.sideTag===tag).length+1;
+      let leadParty=sd.party||"";
+      if(f.actsFor&&f.actsFor!=="All"){
+        const ns=(String(f.actsFor).match(/\d+/g)||[]).map(Number);
+        const sel=partySegments(sd.party).filter(sg=>ns.includes(sg.n));
+        if(sel.length)leadParty=sel.map(sg=>`(${sg.n}) ${sg.name}`).join("; ");
+      }
+      S.leads.push({id:uid(),leadId:`${claim.claimNumber}-${tag}-${seq}`,claimId:claim.id,cycle:d.cycle,
+        side:tag==="CLM"?"Claimant":tag==="DEF"?"Defendant":"Intelligence",sideTag:tag,
+        firmId:m?m.id:null,firmDisplay:disp,actsFor:f.actsFor||"",
+        party:leadParty,sols:(f.sols||[]).slice(),solicitors:solsDisp(f.sols),role:rolesDisp(f.sols),inHouse:ih,
+        owners:m?[...m.aes]:[],ownership:m&&m.aes.length?"Assigned":"Available to Claim",
+        claimedBy:"",claimedAt:"",salesforce:"",
+        outreach:"",contactType:"",outreachDate:"",status:"",result:"",
+        estUSD:"",billedUSD:"",techWon:false,langWon:false,followUp:"",notes:[]});
+    });
+  };
+  if(d.type==="Intelligence"){mkLeads("clm","INT");if(d.def.firms.length)mkLeads("def","INT");}
+  else{mkLeads("clm","CLM");mkLeads("def","DEF");}
+  S.drafts=S.drafts.filter(x=>x.id!==id);
+  markDirty();renderDrafts();refreshNav();
+  toast(`Published ${claim.claimNumber} — leads created. Re-export the AE board when the cycle is done.`);
+}
+
+/* ============ leads & outreach ============ */
+function allAEs(){
+  const set=new Set();
+  S.firms.forEach(f=>(f.aes||[]).forEach(a=>set.add(a)));
+  S.leads.forEach(l=>(l.owners||[]).forEach(a=>set.add(a)));
+  return [...set].sort((a,b)=>a.localeCompare(b));
+}
+function allCycles(){return [...new Set(S.claims.map(c=>c.cycle).concat(S.leads.map(l=>l.cycle)))].filter(Boolean);}
+function fillSelect(id,opts,keep){
+  const el=document.getElementById(id);const cur=el.value;
+  el.innerHTML=(keep||"")+opts.map(o=>`<option>${esc(o)}</option>`).join("");
+  if(el.options&&[...el.options].some(o=>o.value===cur))el.value=cur;
+}
+function claimOf(l){return S.claims.find(c=>c.id===l.claimId)||{};}
+
+let openLead=null;
+function renderLeads(){
+  fillSelect("lf-ae",allAEs(),`<option value="">All AEs</option><option value="__un">Unassigned</option>`);
+  fillSelect("lf-cycle",allCycles(),`<option value="">All cycles</option>`);
+  const q=(document.getElementById("lf-search").value||"").toLowerCase();
+  const fAE=document.getElementById("lf-ae").value, fSide=document.getElementById("lf-side").value,
+        fOut=document.getElementById("lf-outreach").value, fCyc=document.getElementById("lf-cycle").value;
+  const rows=S.leads.filter(l=>{
+    const c=claimOf(l);
+    if(fAE==="__un"&&l.ownership!=="Available to Claim")return false;
+    if(fAE&&fAE!=="__un"&&!(l.owners||[]).includes(fAE))return false;
+    if(fSide&&l.side!==fSide)return false;
+    if(fOut==="Not logged"&&l.outreach)return false;
+    if(fOut&&fOut!=="Not logged"&&l.outreach!==fOut)return false;
+    if(fCyc&&l.cycle!==fCyc)return false;
+    if(q){const hay=`${l.leadId} ${c.caseTitle} ${c.citation} ${l.firmDisplay} ${l.party} ${l.solicitors} ${(l.owners||[]).join(" ")}`.toLowerCase();if(!hay.includes(q))return false;}
+    return true;
+  });
+  const pill=(v,map)=>v?`<span class="pill ${map[v]||"grey"}">${esc(v)}</span>`:`<span class="muted small">—</span>`;
+  const oMap={"Positive":"green","No Response":"amber","Not Relevant":"grey","No Outreach":"grey"};
+  const sMap={"Ongoing":"green","Potential":"navy","Dead":"grey","Closed":"grey"};
+  const rMap={"Work Won":"green","Quoted":"navy","Meeting Set":"navy","Relationship Developed":"navy"};
+  document.getElementById("leadsBody").innerHTML=rows.map(l=>{
+    const c=claimOf(l);
+    const overdue=l.followUp&&l.followUp<today()&&l.status!=="Closed"&&l.status!=="Dead";
+    return `<tr class="leadrow ${openLead===l.id?"exp":""}" onclick="toggleLead('${l.id}')" style="cursor:pointer">
+      <td><span class="docket ${l.side==="Intelligence"?"int":""}">${esc(l.leadId)}</span></td>
+      <td><strong>${esc(c.caseTitle||"")}</strong><br><span class="small muted">${esc(l.party)}</span></td>
+      <td>${esc(l.firmDisplay)}<br><span class="small muted">${esc(l.solicitors)}</span></td>
+      <td>${l.ownership==="Claim Requested"?`<span class="pill amber">Requested: ${esc((l.claimedBy||"").replace(/<[^>]*>/,"").trim())}</span>`:l.ownership==="Available to Claim"?`<span class="pill orange">Available to claim</span>`:esc((l.owners||[]).join(", "))}</td>
+      <td>${pill(l.outreach,oMap)}</td><td>${pill(l.status,sMap)}</td><td>${pill(l.result,rMap)}</td>
+      <td>${l.followUp?`<span class="${overdue?'mono small':'mono small muted'}" style="${overdue?'color:var(--bad);font-weight:600':''}">${esc(l.followUp)}</span>`:`<span class="muted small">—</span>`}</td>
+    </tr>${openLead===l.id?leadDetail(l,c):""}`;
+  }).join("")||`<tr><td colspan="8" class="muted">No leads match. Publish drafts to create leads.</td></tr>`;
+}
+function toggleLead(id){openLead=openLead===id?null:id;renderLeads();}
+function emailSection(l){
+  if(!l.email)return `<div style="margin-top:10px"><button class="btn sm" id="genbtn-${l.id}" onclick="genEmail('${l.id}')">Generate outreach email</button> <span class="small muted">Drafts a first-contact email with slots for the AE to fill; appears on the board at next export.</span></div>`;
+  const e=l.email;
+  return `<div style="margin-top:12px;border:1px solid var(--line);border-radius:5px;padding:10px;background:#fff">
+    <div class="row" style="margin-bottom:6px"><strong class="small">Outreach email draft</strong>
+      <span class="pill grey">angle: ${esc(e.angle||"n/a")}</span><span class="small muted">generated ${esc(e.generatedAt)}</span></div>
+    <div class="stack"><label>Subject</label><input value="${esc(e.subject)}" onchange="updEmail('${l.id}','subject',this.value)"></div>
+    <div class="stack"><label>Body — [square brackets] are slots the AE fills on the board</label>
+      <textarea rows="8" onchange="updEmail('${l.id}','body',this.value)">${esc(e.body)}</textarea></div>
+    ${(e.slots||[]).length?`<p class="small muted" style="margin-bottom:6px">Slots: ${(e.slots||[]).map(x=>esc(x)).join(" · ")}</p>`:""}
+    <div class="row">
+      <button class="btn sm" onclick="copyEmail('${l.id}')">Copy email</button>
+      <button class="btn sm ghost" onclick="outlookEmail('${l.id}')">Download for Outlook (.eml)</button>
+      <button class="btn sm ghost" id="genbtn-${l.id}" onclick="genEmail('${l.id}')">Regenerate</button>
+      <button class="btn danger sm" onclick="delEmail('${l.id}')">Remove draft</button>
+    </div>
+  </div>`;
+}
+function leadDetail(l,c){
+  const sel=(k,opts)=>`<select onclick="event.stopPropagation()" onchange="updLead('${l.id}','${k}',this.value)"><option value="">—</option>${opts.map(o=>`<option ${l[k]===o?"selected":""}>${o}</option>`).join("")}</select>`;
+  return `<tr class="leaddetail" onclick="event.stopPropagation()"><td colspan="8">
+    <p class="small" style="margin-bottom:8px"><strong>${esc(c.citation||"")}</strong> · ${esc(c.value||"no value")} · issued ${esc(c.date||"n/d")}${l.inHouse?` · in-house: ${esc(l.inHouse)}`:""}</p>
+    <p class="small muted" style="margin-bottom:10px;white-space:pre-wrap">${esc((c.summary||"").split("\n\n")[0]||"")}</p>
+    <div class="fieldgrid" style="margin-bottom:10px">
+      <div><label>Outreach</label>${sel("outreach",["No Outreach","No Response","Not Relevant","Positive"])}</div>
+      <div><label>Contact used</label>${sel("contactType",["Matter solicitor","Known firm contact","In-house contact","Other"])}</div>
+      <div><label>Outreach date</label><input type="date" value="${esc(l.outreachDate)}" onchange="updLead('${l.id}','outreachDate',this.value)"></div>
+      <div><label>Status</label>${sel("status",["Dead","Potential","Ongoing","Closed"])}</div>
+      <div><label>Result</label>${sel("result",["Relationship Developed","Meeting Set","Quoted","Work Won"])}</div>
+      <div><label>Est. value (USD)</label><input value="${esc(l.estUSD)}" onchange="updLead('${l.id}','estUSD',this.value)"></div>
+      <div><label>Billed to date (USD)</label><input value="${esc(l.billedUSD)}" onchange="updLead('${l.id}','billedUSD',this.value)"></div>
+      <div><label>Follow-up date</label><input type="date" value="${esc(l.followUp)}" onchange="updLead('${l.id}','followUp',this.value)"></div>
+      <div><label>Salesforce link</label><input value="${esc(l.salesforce)}" placeholder="paste URL" onchange="updLead('${l.id}','salesforce',this.value)"></div>
+      <div><label>Owners</label><input value="${esc((l.owners||[]).join(", "))}" onchange="updLeadOwners('${l.id}',this.value)"></div>
+    </div>
+    <label class="small"><input type="checkbox" ${l.techWon?"checked":""} onchange="updLead('${l.id}','techWon',this.checked)"> Technology work won</label>
+    &nbsp;&nbsp;<label class="small"><input type="checkbox" ${l.langWon?"checked":""} onchange="updLead('${l.id}','langWon',this.checked)"> Language work won</label>
+    ${l.result==="Work Won"&&!val(l.estUSD)&&!val(l.billedUSD)?`<p class="small" style="color:var(--warn);margin-top:6px">⚠ Work Won usually carries a value or an explanation in notes.</p>`:""}
+    ${l.outreach==="No Outreach"&&l.outreachDate?`<p class="small" style="color:var(--warn);margin-top:6px">⚠ No Outreach with an outreach date — check one of them.</p>`:""}
+    ${l.ownership==="Available to Claim"?`<div class="row" style="margin-bottom:10px"><button class="btn sm" onclick="claimForSelf('${l.id}')">Claim this lead for ${esc(WHO||"me")}</button><span class="small muted">Assigns it to you immediately and logs who claimed it.</span></div>`:""}
+    ${l.lastEditBy?`<p class="editstamp" style="margin-bottom:8px">Last edited by ${esc(l.lastEditBy)} · ${esc(l.lastEditAt||"")}</p>`:""}
+    ${l.ownership==="Claim Requested"?`<div class="conflict" style="margin-bottom:10px"><strong class="small">Claim requested by ${esc(l.claimedBy||"unknown")}${l.claimedAt?` on ${esc(l.claimedAt)}`:""}</strong>
+      <div class="row" style="margin-top:6px"><button class="btn sm" onclick="approveClaim('${l.id}')">Approve — assign to them</button>
+      <button class="btn ghost sm" onclick="rejectClaim('${l.id}')">Reject — back to available</button></div></div>`:""}
+    ${emailSection(l)}
+    <div class="row" style="margin-top:10px">
+      <button class="btn ghost sm" onclick="clearOutreach('${l.id}')">Clear outreach log</button>
+      <button class="btn danger sm" onclick="delLead('${l.id}')">Delete lead</button>
+      <span class="small muted">Clear resets outreach fields (noted in history); delete removes the lead entirely.</span>
+    </div>
+    <div style="margin-top:10px"><label class="small muted">Notes (append-only)</label>
+      <div class="notehist">${(l.notes||[]).map(n=>`<div class="n"><span class="d">${esc(n.d)}</span>${esc(n.t)}</div>`).join("")||`<span class="small muted">No notes yet.</span>`}</div>
+      <div class="row"><input id="note-${l.id}" class="grow" placeholder="Add a note…"><button class="btn sm" onclick="addNote('${l.id}')">Add</button></div>
+    </div>
+  </td></tr>`;
+}
+async function updLead(id,k,v){
+  const l=S.leads.find(x=>x.id===id);
+  const prev=l[k];
+  l[k]=v;l.lastEditBy=WHO;l.lastEditAt=new Date().toISOString().slice(0,16).replace("T"," ");
+  renderLeads();
+  document.getElementById("saveLbl").textContent="Saving…";
+  try{
+    const r=await api("lead",{method:"POST",body:{leadId:id,fields:{[k]:v},who:WHO}});
+    if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error||("HTTP "+r.status));}
+    const d=await r.json();VERSION=d.version;markClean();
+  }catch(err){
+    l[k]=prev;renderLeads();
+    toast("Could not save that change: "+err.message,true);
+  }
+}
+async function updLeadOwners(id,v){
+  const l=S.leads.find(x=>x.id===id);
+  const owners=v.split(",").map(x=>x.trim()).filter(Boolean);
+  const ownership=owners.length?"Assigned":"Available to Claim";
+  l.owners=owners;l.ownership=ownership;renderLeads();
+  try{
+    const r=await api("lead",{method:"POST",body:{leadId:id,fields:{owners,ownership},who:WHO}});
+    if(!r.ok)throw new Error("HTTP "+r.status);
+    const d=await r.json();VERSION=d.version;markClean();
+  }catch(err){toast("Owner change not saved: "+err.message,true);}
+}
+function clearOutreach(id){
+  const l=S.leads.find(x=>x.id===id);
+  if(window.__clr!==id){toast("Click Clear again within 5s to confirm resetting the outreach log for "+l.leadId+".",true);window.__clr=id;setTimeout(()=>window.__clr=null,5000);return;}
+  window.__clr=null;
+  Object.assign(l,{outreach:"",contactType:"",outreachDate:"",status:"",result:"",estUSD:"",billedUSD:"",techWon:false,langWon:false,followUp:""});
+  l.notes.push({d:today(),t:"Outreach log cleared"+(S.settings.name?" — "+S.settings.name:"")});
+  logAct("Outreach cleared on "+l.leadId);
+  markDirty();renderLeads();
+}
+function delLead(id){
+  const l=S.leads.find(x=>x.id===id);
+  if(window.__dell!==id){toast("Click Delete again within 5s to permanently remove "+l.leadId+".",true);window.__dell=id;setTimeout(()=>window.__dell=null,5000);return;}
+  window.__dell=null;openLead=null;
+  S.leads=S.leads.filter(x=>x.id!==id);
+  logAct("Lead deleted: "+l.leadId);
+  markDirty();renderLeads();refreshNav();
+}
+async function addNote(id){
+  const inp=document.getElementById("note-"+id);const t=inp.value.trim();if(!t)return;
+  inp.value="";
+  const l=S.leads.find(x=>x.id===id);
+  l.notes.push({d:today(),t:`${t}${WHO?` — ${WHO}`:""}`});renderLeads();
+  try{
+    const r=await api("lead",{method:"POST",body:{leadId:id,fields:{},note:t,who:WHO}});
+    if(!r.ok)throw new Error("HTTP "+r.status);
+    const d=await r.json();VERSION=d.version;markClean();
+  }catch(err){toast("Note not saved: "+err.message,true);}
+}
+
+
+/* ============ outreach email generation ============ */
+const EMAIL_SYS=`You draft first-contact business development emails from UK litigation leads. The sender works for TransPerfect Legal, an eDiscovery, forensic collections and language services provider ranked Chambers Band 1 in eDisclosure. The recipient is a solicitor on the record in a live claim.
+
+You produce a DRAFT WITH SLOTS, not a finished email. The rep filling it in knows things you don't.
+
+THE GOVERNING RULE: you have a summary written from a claim form. You do not have the pleadings, the disclosure position or any data map. Make claims about TransPerfect's capability; never make claims about the recipient's evidence.
+
+Never write: what data sources the matter involves, what the volumes will be, what the disclosure exercise will require, or "given the allegations around X, the disclosure will...". The solicitor knows their case and will spot the guess.
+
+Instead:
+- Hedge the disclosure premise: "if this does progress to disclosure", "should it become document-heavy", "whether it's something we could support on".
+- Attribute the knowledge rather than absorbing it: "our consulting team flagged this matter". Do not reproduce the summary itself anywhere in the email.
+- Personalise lightly from the supplied summary: one or two concrete facts about the matter — the nature of the claim, the relationship between the parties, the value — stated as fact, not inference. A stated fact shows the flag was genuine; a guess destroys it. Two details maximum; the email must still read as a short note, not a case analysis. Stay concrete about our track record: a practice group that exists, a prior comparable matter, an existing relationship with the firm, a cost outcome from a past engagement — that is where credibility comes from.
+
+STRUCTURE
+
+Subject line: the claim number and case name verbatim, nothing else. No "— Litigation Support", no benefit-led subject. It must look like matter correspondence in the inbox.
+
+Body, 90-180 words:
+1. Greeting, then a slot: [personal opener — or delete]. NEVER generate a personal line. A fabricated pleasantry is the worst available failure.
+2. Lead attribution — how a stranger knows about the case, kept punchy: "Our consulting team flagged this matter as one where we may be able to help." One short sentence only — no explanation of the team or its role, no throat-clearing. The hedge ("may") is deliberate: it signals purpose without asserting anything about what the case needs. Vary the wording slightly if it collides with the next sentence, but keep the flagged-by-the-team framing and the hedge.
+3. The matter named, with their role and one clause of matter-specific context drawn from the summary: "I understand [firm] are acting for [party] in the claim concerning [factual detail from the summary — e.g. the former members now operating through a competing firm, or the £17.6m guarantee claim]."
+4. One capability angle, one or two sentences, framed as what we do rather than what their case needs. Optional slot: [comparable matter, if you have one].
+5. ONE ask. Default to routing — "Do you know who's leading it internally? Happy to go to them directly if that's easier" — because it is a favour rather than a sale and works whether or not they are on the matter. Add slot: [swap for a direct ask if you know them and know it's their case].
+6. Graceful out: "Appreciate you may already have arrangements in place."
+7. Sign-off. Nothing after it — no case summary, no reference block, no postscript.
+
+REGISTER
+British English. Solicitors stop reading at the first brochure sentence.
+- One credential, one clause, maximum. An existing relationship replaces it entirely.
+- No feature lists, no performance percentages, no more than three bullets.
+- One ask only.
+- No manufactured warmth from a stranger.
+- Prose, not marketing.
+
+CAPABILITY ANGLES BY CLAIM TYPE (pick one)
+Construction/defects: construction practice group familiar with the breadth of documentation these matters generate.
+M&A/SPA/warranty: transaction disputes where the trail runs across deal papers and negotiation history; experience for teams up against larger opponents.
+Fraud/conspiracy/tracing: forensic collections and speed of preservation; the Chambers ranking rests on investigations work.
+Cyber/IP: machine-generated material working alongside ordinary correspondence.
+Employment/team move: fast defensible collection under injunction timetables.
+Professional negligence: proportionality — often these don't justify a full platform exercise, and saying so builds credibility.
+Competition/class action: high-volume, multilingual, cost management under funder scrutiny.
+Banking/financial services: short-form communications data and structured material.
+Shareholder/unfair prejudice: thin governance records, material scattered across informal channels.
+Defamation/media: redaction-heavy workflows, tight pre-action timetables.
+Arbitration: multilingual capability and request-led production rather than standard disclosure.
+Insolvency: incomplete records from a failed business, under estate cost constraints.
+
+OUTPUT FORMAT
+Return JSON only, no preamble and no markdown fences:
+{"subject": "...", "body": "...", "angle_used": "...", "slots_to_fill": ["..."]}`;
+
+function emailUserMsg(l,c){
+  const lines=[];
+  const add=(k,v)=>{v=val(v);if(v)lines.push(k+": "+v);};
+  add("Claim number",c.claimNumber);
+  add("Case name",c.caseTitle);
+  add("Claim type",c.topics);
+  add("Claim value",c.value);
+  add("Issue date",c.date);
+  add("Acting firm",l.firmDisplay.replace(/ \(direct client\)$/,""));
+  add("Acting for",(l.side!=="Intelligence"?l.side.toLowerCase():"")+(val(l.party)?" — "+l.party:""));
+  const contact=(l.sols&&l.sols[0]&&val(l.sols[0].name))||"";
+  if(contact)add("Contact",contact);
+  else if(val(l.inHouse))add("Contact",l.inHouse);
+  add("Summary",c.summary);
+  if(/direct client/.test(l.firmDisplay)||(!contact&&val(l.inHouse)))
+    lines.push("Note: the recipient is the in-house contact at the client itself, not an external solicitor — adjust framing accordingly.");
+  return lines.join("\n");
+}
+async function genEmail(id){
+  const l=S.leads.find(x=>x.id===id);const c=claimOf(l);
+  const btn=document.getElementById("genbtn-"+id);
+  if(btn){btn.disabled=true;btn.textContent="Generating…";}
+  try{
+    const resp=await api("claude",{method:"POST",body:{model:"claude-sonnet-4-6",max_tokens:1000,system:EMAIL_SYS,messages:[{role:"user",content:emailUserMsg(l,c)}]}});
+    const data=await resp.json();
+    if(data.error)throw new Error(data.error.message||"API error");
+    const raw=(data.content||[]).filter(x=>x.type==="text").map(x=>x.text).join("").replace(/\u0060\u0060\u0060json|\u0060\u0060\u0060/g,"").trim();
+    const e=JSON.parse(raw);
+    l.email={subject:e.subject||"",body:e.body||"",angle:e.angle_used||"",slots:e.slots_to_fill||[],generatedAt:today()};
+    logAct("Email draft generated for "+l.leadId);
+    markDirty();renderLeads();
+    toast("Email drafted — it will appear on the AE board with editable slots at next export.");
+  }catch(err){
+    toast("Email generation failed: "+err.message,true);
+    if(btn){btn.disabled=false;btn.textContent="Generate outreach email";}
+  }
+}
+function updEmail(id,k,v){const l=S.leads.find(x=>x.id===id);if(l.email){l.email[k]=v;markDirty();}}
+function delEmail(id){const l=S.leads.find(x=>x.id===id);delete l.email;markDirty();renderLeads();}
+function copyEmail(id){
+  const l=S.leads.find(x=>x.id===id);if(!l.email)return;
+  const txt="Subject: "+l.email.subject+"\n\n"+emailFullBody(l);
+  const ta=document.createElement("textarea");ta.value=txt;document.body.appendChild(ta);ta.select();
+  try{document.execCommand("copy");toast("Email copied to clipboard.");}catch(e){toast("Copy failed — select and copy from the fields.",true);}
+  ta.remove();
+}
+function emailFullBody(l){return l.email.body;}
+function outlookEmail(id){
+  const l=S.leads.find(x=>x.id===id);if(!l.email)return;
+  const b64=str=>btoa(unescape(encodeURIComponent(str)));
+  const eml="To: \r\nSubject: =?utf-8?B?"+b64(l.email.subject)+"?=\r\nX-Unsent: 1\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n"+emailFullBody(l).replace(/\n/g,"\r\n");
+  download(l.leadId.replace(/[^A-Za-z0-9-]+/g,"_")+"_outreach.eml",new Blob([eml],{type:"message/rfc822"}));
+  toast("Draft saved as .eml — opening it launches an editable Outlook draft.");
+}
+
+/* ============ dashboard ============ */
+function renderDash(){
+  const pub=S.leads.length, contacted=S.leads.filter(l=>l.outreach&&l.outreach!=="No Outreach").length;
+  const positive=S.leads.filter(l=>l.outreach==="Positive").length;
+  const overdue=S.leads.filter(l=>l.followUp&&l.followUp<today()&&!["Closed","Dead"].includes(l.status));
+  const avail=S.leads.filter(l=>l.ownership==="Available to Claim").length;
+  const conflicts=S.drafts.reduce((n,d)=>n+(d.conflicts||[]).filter(c=>!c.chosen).length,0);
+  document.getElementById("dashStats").innerHTML=[
+    ["Claims published",S.claims.length],["Leads",pub],["Contacted",contacted],["Positive",positive],
+    ["Drafts awaiting review",S.drafts.length],["Available to claim",avail]
+  ].map(([l,v])=>`<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("");
+  let alerts="";
+  if(conflicts)alerts+=`<div class="card"><strong>⚠ ${conflicts} unresolved conflict(s)</strong> in drafts — <a href="#" onclick="show('review');return false">resolve in Review</a>.</div>`;
+  if(overdue.length)alerts+=`<div class="card"><strong>${overdue.length} overdue follow-up(s)</strong><br>`+overdue.slice(0,8).map(l=>`<span class="docket" style="margin:3px 4px 0 0;display:inline-block">${esc(l.leadId)}</span> ${esc((l.owners||[]).join(", ")||"unassigned")} — due ${esc(l.followUp)}`).join("<br>")+`</div>`;
+  if(!alerts)alerts=`<div class="card muted">Nothing needs attention.</div>`;
+  document.getElementById("dashAlerts").innerHTML=alerts;
+}
+
+/* ============ reports ============ */
+function renderReports(){
+  fillSelect("rep-cycle",allCycles(),`<option value="">All cycles</option>`);
+  const cyc=document.getElementById("rep-cycle").value;
+  const L=S.leads.filter(l=>!cyc||l.cycle===cyc);
+  const attempted=L.filter(l=>["No Response","Not Relevant","Positive"].includes(l.outreach));
+  const responded=L.filter(l=>["Not Relevant","Positive"].includes(l.outreach));
+  const num=s=>parseFloat(String(s||"").replace(/[^0-9.]/g,""))||0;
+  const est=L.reduce((n,l)=>n+num(l.estUSD),0), billed=L.reduce((n,l)=>n+num(l.billedUSD),0);
+  const cnt=(f)=>L.filter(f).length;
+  const fmt$=(n)=>"$"+n.toLocaleString("en-US",{maximumFractionDigits:0});
+  const byAE={};
+  L.forEach(l=>(l.owners.length?l.owners:["(unassigned)"]).forEach(a=>{
+    const r=byAE[a]=byAE[a]||{leads:0,contacted:0,positive:0,meetings:0,won:0,billed:0};
+    r.leads++;if(l.outreach&&l.outreach!=="No Outreach")r.contacted++;
+    if(l.outreach==="Positive")r.positive++;
+    if(["Meeting Set","Quoted","Work Won"].includes(l.result))r.meetings++;
+    if(l.result==="Work Won")r.won++;r.billed+=num(l.billedUSD);
+  }));
+  document.getElementById("reportBody").innerHTML=`
+  <div class="statgrid">
+    <div class="stat"><div class="v">${L.length}</div><div class="l">Leads</div></div>
+    <div class="stat"><div class="v">${attempted.length}</div><div class="l">Outreach attempted</div></div>
+    <div class="stat"><div class="v">${attempted.length?Math.round(responded.length/attempted.length*100):0}%</div><div class="l">Response rate</div></div>
+    <div class="stat"><div class="v">${cnt(l=>l.outreach==="Positive")}</div><div class="l">Positive</div></div>
+    <div class="stat"><div class="v">${cnt(l=>l.result==="Meeting Set")}</div><div class="l">Meetings set</div></div>
+    <div class="stat"><div class="v">${cnt(l=>l.result==="Quoted")}</div><div class="l">Quoted</div></div>
+    <div class="stat"><div class="v">${cnt(l=>l.result==="Work Won")}</div><div class="l">Work won</div></div>
+    <div class="stat"><div class="v">${fmt$(est)}</div><div class="l">Est. value</div></div>
+    <div class="stat"><div class="v">${fmt$(billed)}</div><div class="l">Billed to date</div></div>
+  </div>
+  <h3>By AE</h3>
+  <div class="tblwrap"><table><thead><tr><th>AE</th><th>Leads</th><th>Contacted</th><th>Positive</th><th>Meeting+</th><th>Work won</th><th>Billed</th></tr></thead>
+  <tbody>${Object.entries(byAE).sort((a,b)=>b[1].leads-a[1].leads).map(([a,r])=>`<tr><td>${esc(a)}</td><td>${r.leads}</td><td>${r.contacted}</td><td>${r.positive}</td><td>${r.meetings}</td><td>${r.won}</td><td>${fmt$(r.billed)}</td></tr>`).join("")||`<tr><td colspan="7" class="muted">No leads yet.</td></tr>`}</tbody></table></div>
+  <p class="small muted" style="margin-top:8px">Claimant vs defendant: ${cnt(l=>l.side==="Claimant")} claimant-side, ${cnt(l=>l.side==="Defendant")} defendant-side, ${cnt(l=>l.side==="Intelligence")} intelligence.</p>`;
+}
+
+/* ============ data tab, save/load ============ */
+function renderData(){
+  document.getElementById("set-name").value=WHO||"";
+  document.getElementById("set-email").value=S.settings.email||"";
+  document.getElementById("whoLbl").textContent=WHO||"";
+  fillSelect("exp-cycle",allCycles(),"");
+  document.getElementById("actLog").innerHTML=S.log.map(e=>`<div><span class="mono">${esc(e.d)}</span> — ${esc(e.m)}</div>`).join("")||"No activity yet.";
+}
+function saveSettings(){S.settings.email=document.getElementById("set-email").value.trim();markDirty();}
+function download(name,content,type){
+  const blob=content instanceof Blob?content:new Blob([content],{type:type||"application/octet-stream"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},2000);
+}
+function saveJson(){
+  download(`lexextract-backup-${today()}.json`,JSON.stringify(S,null,1),"application/json");
+  toast("Backup downloaded — keep it on SharePoint.");
+}
+function loadJson(file){
+  if(!file)return;
+  const r=new FileReader();
+  r.onload=e=>{
+    try{
+      const incoming=migrate(JSON.parse(e.target.result));
+      if(dirty&&!window.__forceLoad){toast("You have unsaved changes. Click Load again within 10s to overwrite them.",true);window.__forceLoad=true;setTimeout(()=>window.__forceLoad=false,10000);document.getElementById("loadJsonInput").value="";return;}
+      S=incoming;window.__forceLoad=false;
+      logAct(`Backup restored by ${WHO} (${file.name})`);
+      refreshNav();show("dash");markDirty();
+      toast(`Loaded ${file.name}: ${S.claims.length} claims, ${S.leads.length} leads, ${S.firms.length} firms.`);
+    }catch(err){toast("Not a valid LexExtract data file: "+err.message,true);}
+    document.getElementById("loadJsonInput").value="";
+  };
+  r.readAsText(file);
+}
+async function wipeAll(){
+  if(!window.__wipe){toast("Click again within 5s to confirm wiping ALL data from this artifact.",true);window.__wipe=true;setTimeout(()=>window.__wipe=false,5000);return;}
+  S=blankState();
+  await pushState();
+  refreshNav();show("dash");toast("All data cleared for everyone.");
+}
+
+/* ============ AE board export ============ */
+function boardData(){
+  return S.leads.map(l=>{const c=claimOf(l);return{
+    leadId:l.leadId,side:l.side,cycle:l.cycle,firm:l.firmDisplay,actsFor:l.actsFor||"",party:l.party,solicitors:l.solicitors,
+    inHouse:l.inHouse,owners:l.owners,ownership:l.ownership,claimedBy:l.claimedBy||"",outreach:l.outreach,status:l.status,result:l.result,
+    followUp:l.followUp,salesforce:l.salesforce,email:l.email||null,
+    title:c.caseTitle||"",citation:c.citation||"",value:c.value||"",date:c.date||"",topics:c.topics||"",summary:c.summary||""};});
+}
+function buildBoardHtml(netlify){
+  const data=boardData();
+  const aes=[...new Set(data.flatMap(d=>d.owners))].sort();
+  const idScript="";
+  const logoutBtn="";
+  const whoOpts=aes.map(a=>'<option>'+esc(a)+'</option>').join("");
+  const whoPicker=netlify?'<label style="font-size:12.5px">Claiming as: <select id="whoSel" style="margin-left:6px"><option value="">— choose your name —</option>'+whoOpts+'<option value="__other">Other (type it)</option></select></label><input id="whoOther" placeholder="Your name" style="display:none;margin-left:6px">':"";
+  const aeOpts=aes.map(a=>'<option>'+esc(a)+'</option>').join("");
+  const cyOpts=allCycles().map(c=>'<option>'+esc(c)+'</option>').join("");
+  const dataJson=JSON.stringify(data);
+  const meJson=JSON.stringify(S.settings.email||"");
+  const netlifyFlag=netlify?"true":"false";
+  const gen=today(), count=data.length;
+  return `<!DOCTYPE html><html lang="en-GB"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LexExtract — Lead Board</title>${idScript}<style>
+:root{--navy:#132A47;--orange:#E87722;--paper:#F6F5F1;--line:#DAD7CE;--slate:#5E6B7C;--good:#2E7D32;--warn:#A96500}
+*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--paper);color:#1C2431;font-size:14px}
+header{background:var(--navy);color:#fff;padding:16px 22px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+header h1{font-family:"Iowan Old Style",Palatino,Georgia,serif;font-size:20px}header h1 span{color:var(--orange)}
+header p{color:#93A3B8;font-size:12px;margin-top:3px}
+.hright{font-size:12.5px;color:#C4CEDC}.hright button{background:none;border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:4px;padding:4px 9px;font-size:12px;cursor:pointer;margin-left:8px}
+.bar{display:flex;gap:10px;padding:14px 22px;flex-wrap:wrap;align-items:center}
+select,input{padding:7px 9px;border:1px solid var(--line);border-radius:4px;font-size:13px}
+main{padding:0 22px 60px;max-width:1000px;margin:0 auto}
+.card{background:#fff;border:1px solid var(--line);border-radius:6px;margin-bottom:12px;padding:14px}
+.docket{font-family:ui-monospace,Consolas,monospace;font-size:12px;border:1.5px solid var(--navy);color:var(--navy);border-radius:3px;padding:1px 7px;background:#fff}
+.pill{display:inline-block;font-size:11px;font-weight:600;border-radius:10px;padding:2px 9px;margin-left:6px}
+.pill.g{background:#DFF0E0;color:var(--good)}.pill.a{background:#F6E8CE;color:var(--warn)}.pill.o{background:#FBE4D2;color:#B35310}.pill.n{background:#DCE4EF;color:var(--navy)}.pill.grey{background:#E7E5DE;color:var(--slate)}
+.t{font-family:"Iowan Old Style",Palatino,Georgia,serif;font-size:16px;font-weight:600;margin:6px 0 2px}
+.meta{color:var(--slate);font-size:12.5px;margin-bottom:6px}
+details summary{cursor:pointer;color:var(--slate);font-size:13px;margin:6px 0}
+.sum{white-space:pre-wrap;font-size:13px;color:#333;border-left:3px solid var(--line);padding-left:10px;margin:6px 0}
+.log{display:inline-block;background:var(--orange);color:#fff;text-decoration:none;border-radius:4px;padding:7px 12px;font-size:13px;font-weight:600;margin-top:8px}
+.log:hover{background:#CE6414}.sf{margin-left:10px;font-size:13px}
+.empty{color:var(--slate);padding:30px;text-align:center}
+.em{border:1px solid var(--line);border-radius:5px;background:#FCFBF8;padding:10px;margin-top:8px}
+.em .sub{font-weight:600;margin-bottom:6px;font-size:13px}
+.em .bod{white-space:pre-wrap;font-size:13px;line-height:1.5}
+.em input.slot{border:1.5px dashed var(--orange);background:#FFF7F0;border-radius:3px;padding:2px 6px;font-size:12.5px;min-width:200px;margin:1px 0}
+.em .acts{margin-top:8px}
+.btn2{display:inline-block;background:#132A47;color:#fff;border:none;border-radius:4px;padding:7px 12px;font-size:13px;font-weight:600;cursor:pointer;margin-right:6px;margin-top:8px}
+.btn2:hover{background:#0C1D33}.btn2:disabled{opacity:.55;cursor:default}
+.hright select,.hright input{padding:5px 8px;border-radius:4px;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.1);color:#fff;font-size:12.5px}
+.hright select option{color:#1C2431}
+</style></head><body>
+<form name="lead-claim" data-netlify="true" netlify-honeypot="bot-field" hidden>
+  <input name="leadId"><input name="firm"><input name="case"><input name="claimedBy"><input name="claimedByEmail"><input name="claimedDate"><input name="bot-field">
+</form>
+<header><div><h1>Lex<span>Extract</span> — Lead Board</h1><p>Generated ${gen} · ${count} leads</p></div>
+<div class="hright">${whoPicker}</div></header>
+<div id="appwrap">
+<div class="bar">
+  <select id="fae"><option value="">All AEs</option><option value="__avail">Available to claim</option>${aeOpts}</select>
+  <select id="fcy"><option value="">All cycles</option>${cyOpts}</select>
+  <select id="fst"><option value="">All</option><option value="new">Not yet contacted</option><option value="done">Contacted</option></select>
+  <input id="fq" placeholder="Search…" style="flex:1;min-width:160px">
+</div>
+<main id="list"></main>
+</div>
+<script>
+const DATA=${dataJson};const ME=${meJson};const NETLIFY=${netlifyFlag};
+function esc(s){return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+function claimedLocal(l){try{return localStorage.getItem("claimed-"+l.leadId)==="1";}catch(e){return false;}}
+function emailBlock(l,i){
+  const segs=String(l.email.body).split(/(\\[[^\\]]+\\])/);
+  const bod=segs.map((sg,j)=>{
+    if(/^\\[[^\\]]+\\]$/.test(sg))return '<input class="slot" data-slot="1" id="sl-'+i+'-'+j+'" placeholder="'+esc(sg.slice(1,-1))+'">';
+    return esc(sg);
+  }).join("");
+  return '<details class="em"><summary style="cursor:pointer;font-size:13px;color:#5E6B7C">Draft email — fill the dashed slots, then download for Outlook</summary>'+
+    '<div style="margin-top:8px"><div class="sub">Subject: '+esc(l.email.subject)+'</div>'+
+    '<div class="bod" id="bod-'+i+'">'+bod+'</div>'+
+    '<div class="acts"><button class="btn2" onclick="downloadEml('+i+')">Download for Outlook (.eml)</button>'+
+    '<button class="btn2" style="background:#E87722" onclick="copyEm('+i+',this)">Copy email</button>'+
+    '<span style="font-size:12px;color:#5E6B7C">Opens in Outlook as an editable draft. Empty slots are removed. Add the recipient before sending.</span></div></div></details>';
+}
+function assembleEmail(i){
+  const l=window.__rows[i];
+  const bod=document.getElementById("bod-"+i);
+  let out="";
+  bod.childNodes.forEach(n=>{
+    if(n.nodeType===3)out+=n.textContent;
+    else if(n.tagName==="INPUT")out+=n.value.trim();
+    else out+=n.textContent;
+  });
+  out=out.replace(/[ \\t]+([,.;])/g,"$1").replace(/\\n{3,}/g,"\\n\\n").replace(/^[ \\t]+/gm,"").trim();
+  return {subject:l.email.subject,body:out};
+}
+function b64utf8(str){return btoa(unescape(encodeURIComponent(str)));}
+function downloadEml(i){
+  const e=assembleEmail(i);
+  const eml="To: \\r\\nSubject: =?utf-8?B?"+b64utf8(e.subject)+"?=\\r\\nX-Unsent: 1\\r\\nMIME-Version: 1.0\\r\\nContent-Type: text/plain; charset=utf-8\\r\\nContent-Transfer-Encoding: 8bit\\r\\n\\r\\n"+e.body.replace(/\\n/g,"\\r\\n");
+  const l=window.__rows[i];
+  const blob=new Blob([eml],{type:"message/rfc822"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);
+  a.download=l.leadId.replace(/[^A-Za-z0-9-]+/g,"_")+"_outreach.eml";
+  document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},2000);
+}
+function copyEm(i,btn){
+  const e=assembleEmail(i);
+  const txt="Subject: "+e.subject+"\\n\\n"+e.body;
+  const ta=document.createElement("textarea");ta.value=txt;document.body.appendChild(ta);ta.select();
+  try{document.execCommand("copy");btn.textContent="Copied";setTimeout(()=>btn.textContent="Copy email",2000);}catch(err){alert("Copy failed — select the text manually.");}
+  ta.remove();
+}
+function mailto(l){
+  const sub=encodeURIComponent("Outreach log: "+l.leadId);
+  const body=encodeURIComponent("Lead: "+l.leadId+" — "+l.title+"\\nFirm: "+l.firm+"\\n\\nContacted: [matter solicitor / known firm contact / in-house / other — who?]\\nDate: "+new Date().toISOString().slice(0,10)+"\\nOutcome so far: [no response yet / not relevant / positive — detail]\\nNext step / follow-up date: \\nSalesforce link (if logged): ");
+  return "mailto:"+ME+"?subject="+sub+"&body="+body;
+}
+function claimLead(i,btn){
+  const l=window.__rows[i];
+  const name=currentName();
+  if(!name){alert("Choose your name in the header first — it goes with the claim.");const s=document.getElementById("whoSel");if(s)s.focus();return;}
+  const fields={"form-name":"lead-claim",leadId:l.leadId,firm:l.firm,"case":l.title,claimedBy:name,claimedByEmail:"",claimedDate:new Date().toISOString().slice(0,10)};
+  const body=Object.entries(fields).map(([k,v])=>encodeURIComponent(k)+"="+encodeURIComponent(v)).join("&");
+  btn.disabled=true;btn.textContent="Submitting…";
+  fetch("/",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:body})
+    .then(r=>{if(!r.ok)throw new Error("HTTP "+r.status);btn.textContent="Claim submitted ✓";try{localStorage.setItem("claimed-"+l.leadId,"1");}catch(e){}})
+    .catch(()=>{btn.disabled=false;btn.textContent="Claim this lead";alert("Submission failed — try again, or email the BD team.");});
+}
+function render(){
+  const ae=document.getElementById("fae").value,cy=document.getElementById("fcy").value,st=document.getElementById("fst").value,q=document.getElementById("fq").value.toLowerCase();
+  const rows=DATA.filter(l=>{
+    if(ae==="__avail"&&l.ownership!=="Available to Claim")return false;
+    if(ae&&ae!=="__avail"&&!l.owners.includes(ae))return false;
+    if(cy&&l.cycle!==cy)return false;
+    if(st==="new"&&l.outreach)return false;
+    if(st==="done"&&!l.outreach)return false;
+    if(q&&!(l.leadId+" "+l.title+" "+l.firm+" "+l.party+" "+l.solicitors).toLowerCase().includes(q))return false;
+    return true});
+  window.__rows=rows;
+  document.getElementById("list").innerHTML=rows.map((l,i)=>{
+    let own;
+    if(l.ownership==="Claim Requested")own='<span class="pill a">Claim requested'+(l.claimedBy?": "+esc(l.claimedBy):"")+' — pending approval</span>';
+    else if(l.ownership==="Available to Claim")own='<span class="pill o">Available to claim</span>';
+    else own='<span class="pill n">'+esc(l.owners.join(", "))+"</span>";
+    const out=l.outreach?'<span class="pill '+(l.outreach==="Positive"?"g":"a")+'">'+esc(l.outreach)+"</span>":'<span class="pill grey">Not yet contacted</span>';
+    const canClaim=NETLIFY&&l.ownership==="Available to Claim";
+    const done=claimedLocal(l);
+    return '<div class="card"><span class="docket">'+esc(l.leadId)+"</span>"+(l.actsFor?'<span class="pill grey">acts for '+esc(l.actsFor)+"</span>":"")+own+out+(l.status?'<span class="pill grey">'+esc(l.status)+"</span>":"")+(l.result?'<span class="pill g">'+esc(l.result)+"</span>":"")+
+    '<div class="t">'+esc(l.title)+'</div><div class="meta">'+esc(l.side)+" side · "+esc(l.party||"party n/d")+" · "+esc(l.value||"value n/d")+" · issued "+esc(l.date||"n/d")+'</div>'+
+    '<div><strong>'+esc(l.firm)+"</strong>"+(l.solicitors?" — "+esc(l.solicitors):"")+(l.inHouse?'<div class="meta">In-house: '+esc(l.inHouse)+"</div>":"")+"</div>"+
+    (l.summary?'<details><summary>Case summary</summary><div class="sum">'+esc(l.summary)+"</div></details>":"")+
+    (l.email?emailBlock(l,i):"")+
+    (canClaim?'<button class="btn2" style="background:#2E7D32" onclick="claimLead('+i+',this)"'+(done?" disabled":"")+'>'+(done?"Claim submitted ✓":"Claim this lead")+"</button>":"")+
+    (ME?'<a class="log" href="'+mailto(l)+'">Log outreach</a>':"")+
+    (l.salesforce?'<a class="sf" href="'+esc(l.salesforce)+'" target="_blank" rel="noopener">Salesforce ↗</a>':"")+
+    "</div>"}).join("")||'<div class="empty">No leads match this filter.</div>';
+}
+function currentName(){
+  const sel=document.getElementById("whoSel");if(!sel)return "";
+  if(sel.value==="__other")return (document.getElementById("whoOther").value||"").trim();
+  return sel.value;
+}
+function saveName(){
+  const sel=document.getElementById("whoSel");if(!sel)return;
+  try{localStorage.setItem("board-who",sel.value);localStorage.setItem("board-who-other",document.getElementById("whoOther").value||"");}catch(e){}
+  document.getElementById("whoOther").style.display=sel.value==="__other"?"inline-block":"none";
+  render();
+}
+function restoreName(){
+  const sel=document.getElementById("whoSel");if(!sel)return;
+  try{
+    const v=localStorage.getItem("board-who")||"";
+    if(v&&[...sel.options].some(o=>o.value===v))sel.value=v;
+    document.getElementById("whoOther").value=localStorage.getItem("board-who-other")||"";
+    document.getElementById("whoOther").style.display=sel.value==="__other"?"inline-block":"none";
+  }catch(e){}
+}
+["fae","fcy","fst"].forEach(id=>document.getElementById(id).addEventListener("change",render));
+document.getElementById("fq").addEventListener("input",render);
+if(NETLIFY){
+  document.getElementById("whoSel").addEventListener("change",saveName);
+  document.getElementById("whoOther").addEventListener("input",saveName);
+  restoreName();
+}
+render();
+<\/script></body></html>`;
+}
+function exportBoard(){
+  if(!S.leads.length){toast("No leads to export yet.",true);return;}
+  download(`LexExtract_Lead_Board_${today()}.html`,buildBoardHtml(false),"text/html");
+  logAct("AE lead board exported");
+  toast("Board exported. Post it to the Teams channel — AEs open it from their downloads.");
+}
+function importClaimsCsv(file){
+  if(!file)return;
+  Papa.parse(file,{header:true,skipEmptyLines:true,complete:res=>{
+    const col=(row,frag)=>{const k=Object.keys(row).find(k=>k.toLowerCase().replace(/[^a-z]/g,"").includes(frag));return k?String(row[k]).trim():"";};
+    let applied=0,skippedAssigned=0,conflicts=[],unknown=[];
+    res.data.forEach(row=>{
+      const leadId=col(row,"leadid"); if(!leadId)return;
+      const by=col(row,"claimedby")||col(row,"name")||"unknown";
+      const em=col(row,"email");
+      const dt=col(row,"claimeddate")||col(row,"created")||today();
+      const l=S.leads.find(x=>x.leadId.toUpperCase()===leadId.toUpperCase());
+      if(!l){unknown.push(leadId);return;}
+      if(l.ownership==="Assigned"&&l.owners.length){skippedAssigned++;return;}
+      if(l.ownership==="Claim Requested"&&l.claimedBy&&l.claimedBy.toLowerCase()!==by.toLowerCase()){conflicts.push(`${leadId}: ${l.claimedBy} vs ${by}`);return;}
+      l.ownership="Claim Requested";l.claimedBy=by+(em?` <${em}>`:"");l.claimedAt=dt.slice(0,10);
+      applied++;
+    });
+    logAct(`Claims CSV import: ${applied} requests applied, ${skippedAssigned} already assigned, ${conflicts.length} conflicts, ${unknown.length} unknown lead IDs`);
+    markDirty();renderLeads();
+    let msg=`${applied} claim request(s) applied — approve them from each lead's detail panel.`;
+    if(skippedAssigned)msg+=` ${skippedAssigned} skipped (already assigned).`;
+    if(conflicts.length)msg+=` Conflicts (first claim kept): ${conflicts.join("; ")}.`;
+    if(unknown.length)msg+=` Unknown IDs: ${unknown.join(", ")}.`;
+    toast(msg,conflicts.length>0);
+    document.getElementById("claimsCsv").value="";
+  }});
+}
+async function claimForSelf(id){
+  if(!WHO){toast("No name set — sign in again.",true);return;}
+  const l=S.leads.find(x=>x.id===id);
+  l.owners=[WHO];l.ownership="Assigned";l.claimedBy=WHO;l.claimedAt=today();
+  l.notes.push({d:today(),t:`Claimed by ${WHO}`});
+  renderLeads();
+  try{
+    const r=await api("lead",{method:"POST",body:{leadId:id,fields:{owners:[WHO],ownership:"Assigned",claimedBy:WHO,claimedAt:today()},note:`Claimed by ${WHO}`,who:WHO}});
+    if(!r.ok)throw new Error("HTTP "+r.status);
+    const d=await r.json();VERSION=d.version;markClean();
+    toast("Lead claimed — it's yours.");
+  }catch(err){toast("Claim not saved: "+err.message,true);}
+}
+function approveClaim(id){
+  const l=S.leads.find(x=>x.id===id);
+  const name=(l.claimedBy||"").replace(/\s*<[^>]*>\s*$/,"").trim();
+  if(!name){toast("No claimant name on this lead.",true);return;}
+  l.owners=[name];l.ownership="Assigned";
+  l.notes.push({d:today(),t:`Claim approved — assigned to ${name}${S.settings.name?" by "+S.settings.name:""}`});
+  logAct(`Claim approved: ${l.leadId} → ${name}`);
+  markDirty();renderLeads();refreshNav();
+}
+function rejectClaim(id){
+  const l=S.leads.find(x=>x.id===id);
+  l.notes.push({d:today(),t:`Claim by ${l.claimedBy||"unknown"} rejected${S.settings.name?" — "+S.settings.name:""}`});
+  l.ownership="Available to Claim";l.claimedBy="";l.claimedAt="";
+  logAct(`Claim rejected: ${l.leadId}`);
+  markDirty();renderLeads();
+}
+
+/* ============ Excel roundup export ============ */
+async function exportRoundup(){
+  const cyc=document.getElementById("exp-cycle").value;
+  const claims=S.claims.filter(c=>c.cycle===cyc&&c.type==="Court");
+  if(!claims.length){toast("No published court claims in that cycle.",true);return;}
+  const wb=new ExcelJS.Workbook();const ws=wb.addWorksheet("Roundup");
+  const cols=["Round Up","Clm: AE","AE: Notes","Def: AE","AE: Notes","Date","Case Title","Topic","Citation","Value","Summary","Claimant","Clm: Law Firm","Clm: Lawyer","Role","Clm: In-House","Defendant","Def: Law Firm","Def: Lawyer","Role","Def: In-House"];
+  const widths=[14,12,16,12,16,11,26,18,30,10,52,22,22,20,14,16,22,22,20,14,16];
+  ws.addRow(cols);
+  const hdr=ws.getRow(1);
+  hdr.eachCell(c=>{c.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF132A47"}};c.font={bold:true,color:{argb:"FFC9A227"},size:10};c.alignment={vertical:"middle",wrapText:true};});
+  claims.forEach((c,i)=>{
+    const sideAgg=(tag)=>{
+      const ls=S.leads.filter(l=>l.claimId===c.id&&l.sideTag===tag);
+      const j=(f)=>[...new Set(ls.map(f).filter(v=>val(v)))].join("; ");
+      return {ae:[...new Set(ls.flatMap(l=>l.owners))].join(", "),firm:j(l=>l.firmDisplay.startsWith("No firm")?"":l.firmDisplay),law:j(l=>l.solicitors),role:j(l=>l.role),ih:j(l=>l.inHouse)};
+    };
+    const C=sideAgg("CLM"),D=sideAgg("DEF");
+    const orNP=(v,f)=>val(v)||`No ${f} provided`;
+    const row=ws.addRow([c.cycle,C.ae,"",D.ae,"",orNP(c.date,"Date"),c.caseTitle,c.topics,c.citation,orNP(c.value,"Value"),c.summary,
+      orNP(c.clmParty,"Claimant"),orNP(C.firm,"Law Firm"),orNP(C.law,"Lawyer"),orNP(C.role,"Role"),orNP(C.ih,"In-House"),
+      orNP(c.defParty,"Defendant"),orNP(D.firm,"Law Firm"),orNP(D.law,"Lawyer"),orNP(D.role,"Role"),orNP(D.ih,"In-House")]);
+    row.eachCell(cell=>{cell.alignment={vertical:"top",wrapText:true};cell.font={size:10};
+      if(i%2)cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFF0EEE8"}};});
+    if(c.citationFromFilename)row.getCell(9).note="Citation built from filename — verify against the claim form.";
+  });
+  cols.forEach((_,i)=>ws.getColumn(i+1).width=widths[i]);
+  ws.views=[{state:"frozen",ySplit:1}];
+  const buf=await wb.xlsx.writeBuffer();
+  download(`${today().replace(/-/g,"")}_${cyc.replace(/[^A-Za-z0-9]+/g,"_")}.xlsx`,new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+  logAct(`Excel roundup exported (${cyc})`);
+  toast("Roundup exported.");
+}
+
+/* ============ init ============ */
+(async function(){
+  renderNav();
+  document.getElementById("gatePass").addEventListener("keydown",e=>{if(e.key==="Enter")document.getElementById("gateName").focus();});
+  document.getElementById("gateName").addEventListener("keydown",e=>{if(e.key==="Enter")doLogin();});
+  await restoreCache();
+})();
+</script>
+</body>
+</html>
