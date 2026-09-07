@@ -42,7 +42,9 @@ textarea{resize:vertical}
 #side .foot .dot.dirty{background:var(--warn)}
 /* main */
 #app{display:flex;width:100%}
-#main{flex:1;min-width:0;padding:22px 26px 60px;max-width:1280px}
+#main{flex:1;min-width:0;padding:22px 26px 60px;max-width:none;width:100%}
+/* text-heavy tabs stay readable rather than stretching a paragraph across a 27" monitor */
+#v-data .card,#v-firms>.card:first-of-type{max-width:1100px}
 #gate{position:fixed;inset:0;background:var(--navy);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px}
 .gatebox{background:#fff;border-radius:8px;padding:28px;width:100%;max-width:340px;text-align:center}
 .gatebox h1{font-family:var(--ff-display);font-size:26px;color:var(--navy);margin-bottom:4px}
@@ -89,7 +91,7 @@ tr:hover td{background:#FBFAF6}
 .mono{font-family:var(--ff-mono)}
 .drop{border:2px dashed var(--line);border-radius:6px;padding:26px;text-align:center;color:var(--slate);background:#fff}
 .drop.over{border-color:var(--orange);background:#FFF7F0}
-.fieldgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.fieldgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
 .fieldgrid label,.stack label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--slate);margin-bottom:3px}
 .fieldgrid input,.fieldgrid select{width:100%}
 .stack{margin-bottom:10px}
@@ -116,8 +118,24 @@ tr:hover td{background:#FBFAF6}
 .stat{background:#fff;border:1px solid var(--line);border-radius:6px;padding:12px}
 .stat .v{font-family:var(--ff-display);font-size:24px;font-weight:600;color:var(--navy)}
 .stat .l{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--slate);margin-top:2px}
-.leadrow.exp{background:#FBFAF6}
-.leaddetail td{background:#FCFBF8 !important;padding:14px}
+.leadrow.exp>td{background:#EDF1F7 !important;box-shadow:inset 0 2px 0 var(--navy)}
+.leadrow.exp>td:first-child{box-shadow:inset 4px 0 0 var(--orange),inset 0 2px 0 var(--navy)}
+.leaddetail>td{background:transparent !important;padding:0;border-bottom:2px solid var(--navy)}
+.leadpanel{
+  height:76vh;min-height:240px;max-height:92vh;
+  overflow:auto;resize:vertical;
+  background:linear-gradient(#F4F1EA,#FBFAF7 90px);
+  border-left:4px solid var(--orange);
+  padding:16px 18px 26px;
+}
+.leadpanel::after{content:"";display:block;height:6px}
+.leadpanel .psum{max-width:105ch}
+.leadpanel .phead{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:12px}
+.leadpanel .phead .pt{font-family:var(--ff-display);font-size:17px;font-weight:600;color:var(--navy)}
+.leadpanel .grip{position:sticky;bottom:-26px;float:right;font-size:11px;color:var(--slate);font-family:var(--ff-mono)}
+#leadsWrap{border:1px solid var(--line);border-radius:6px;overflow:visible;background:#fff}
+.actchip{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--slate);background:#EFECE4;border-radius:9px;padding:1px 7px;margin-top:3px;white-space:nowrap}
+.actchip .dot{width:5px;height:5px;border-radius:50%;background:var(--good);display:inline-block}
 .notehist{border-left:3px solid var(--line);padding-left:10px;margin:6px 0}
 .notehist .n{margin-bottom:6px;font-size:12.5px}
 .notehist .n .d{color:var(--slate);font-family:var(--ff-mono);font-size:11px;margin-right:6px}
@@ -143,7 +161,7 @@ details.adv summary{cursor:pointer;color:var(--slate);font-size:12.5px}
 </div>
 <div id="app" style="display:none;width:100%">
 <aside id="side">
-  <div class="brand"><h1>Lex<span>Extract</span></h1><small>Web · build 2</small></div>
+  <div class="brand"><h1>Lex<span>Extract</span></h1><small>Web · build 4</small></div>
   <nav id="nav"></nav>
   <div class="foot"><span class="dot" id="saveDot"></span><span id="saveLbl">Saved</span><br><span id="whoLbl"></span></div>
 </aside>
@@ -166,9 +184,15 @@ details.adv summary{cursor:pointer;color:var(--slate);font-size:12.5px}
       <select id="lf-side" onchange="renderLeads()"><option value="">All sides</option><option>Claimant</option><option>Defendant</option><option>Intelligence</option></select>
       <select id="lf-outreach" onchange="renderLeads()"><option value="">All outreach</option><option>Not logged</option><option>No Outreach</option><option>No Response</option><option>Not Relevant</option><option>Positive</option></select>
       <select id="lf-cycle" onchange="renderLeads()"><option value="">All cycles</option></select>
+      <select id="lf-view" onchange="renderLeads()">
+        <option value="active">Active (hides scheduled revisits)</option>
+        <option value="due">Due now</option>
+        <option value="revisit">Scheduled revisits</option>
+        <option value="all">Everything</option>
+      </select>
     </div>
   </div>
-  <div class="tblwrap"><table id="leadsTable"><thead><tr>
+  <div id="leadsWrap"><table id="leadsTable"><thead><tr>
     <th>Lead</th><th>Case</th><th>Firm</th><th>Owners</th><th>Outreach</th><th>Status</th><th>Result</th><th>Follow-up</th>
   </tr></thead><tbody id="leadsBody"></tbody></table></div>
 </section>
@@ -502,14 +526,71 @@ function fillSelect(id,opts,keep){
   if(el.options&&[...el.options].some(o=>o.value===cur))el.value=cur;
 }
 function claimOf(l){return S.claims.find(c=>c.id===l.claimId)||{};}
+function isDue(l){return !!l.followUp&&l.followUp<=today()&&!["Closed","Dead"].includes(l.status);}
+function dueLabel(l){
+  if(!l.followUp)return "";
+  if(isDue(l))return "Due now";
+  const d=Math.round((new Date(l.followUp)-new Date(today()))/86400000);
+  if(d<=31)return `in ${d} day${d===1?"":"s"}`;
+  const m=Math.round(d/30);return `in ${m} month${m===1?"":"s"}`;
+}
 
 let openLead=null;
+/* ---- firm-level recent activity marker ---- */
+const ACTIVITY_WINDOW_DAYS=30; /* change to 14 for a strictly fortnightly window */
+function firmKey(l){return l.firmId||("name:"+normFirm(l.firmDisplay));}
+function daysAgo(dateStr){
+  if(!dateStr)return null;
+  const d=new Date(String(dateStr).slice(0,10));
+  if(isNaN(d))return null;
+  const diff=Math.floor((Date.now()-d.getTime())/86400000);
+  return diff<0?0:diff;
+}
+function leadActivity(l){
+  /* most recent dated signal on this lead, with who did it */
+  const cands=[];
+  if(l.outreachDate)cands.push({d:l.outreachDate,who:(l.owners||[])[0]||l.lastEditBy||""});
+  if(l.lastEditAt)cands.push({d:l.lastEditAt,who:l.lastEditBy||""});
+  (l.notes||[]).forEach(n=>{
+    const m=String(n.t||"").match(/—\s*([^—]+)$/);
+    cands.push({d:n.d,who:m?m[1].trim():(l.lastEditBy||"")});
+  });
+  let best=null;
+  cands.forEach(c=>{
+    const ago=daysAgo(c.d);
+    if(ago===null)return;
+    if(!best||ago<best.ago)best={ago,who:c.who,d:c.d};
+  });
+  return best;
+}
+function firmActivity(lead){
+  /* activity across every lead of the same firm, within the decay window */
+  const key=firmKey(lead);
+  let best=null;
+  S.leads.forEach(o=>{
+    if(firmKey(o)!==key)return;
+    const a=leadActivity(o);
+    if(!a||a.ago>ACTIVITY_WINDOW_DAYS)return;
+    if(!best||a.ago<best.ago)best=Object.assign({},a,{sameLead:o.id===lead.id,leadId:o.leadId});
+  });
+  return best;
+}
+function activityChip(l){
+  const a=firmActivity(l);
+  if(!a)return "";
+  const when=a.ago===0?"today":a.ago===1?"yesterday":a.ago+"d ago";
+  const who=a.who?esc(a.who)+" " :"";
+  const where=a.sameLead?"":` on ${esc(a.leadId)}`;
+  return `<div class="actchip" title="Most recent activity logged against this firm${where?" ("+a.leadId+")":""}"><span class="dot"></span>${who}active ${when}${where}</div>`;
+}
+
 function renderLeads(){
   fillSelect("lf-ae",allAEs(),`<option value="">All AEs</option><option value="__un">Unassigned</option>`);
   fillSelect("lf-cycle",allCycles(),`<option value="">All cycles</option>`);
   const q=(document.getElementById("lf-search").value||"").toLowerCase();
   const fAE=document.getElementById("lf-ae").value, fSide=document.getElementById("lf-side").value,
-        fOut=document.getElementById("lf-outreach").value, fCyc=document.getElementById("lf-cycle").value;
+        fOut=document.getElementById("lf-outreach").value, fCyc=document.getElementById("lf-cycle").value,
+        fView=(document.getElementById("lf-view")||{value:"active"}).value;
   const rows=S.leads.filter(l=>{
     const c=claimOf(l);
     if(fAE==="__un"&&l.ownership!=="Available to Claim")return false;
@@ -518,27 +599,39 @@ function renderLeads(){
     if(fOut==="Not logged"&&l.outreach)return false;
     if(fOut&&fOut!=="Not logged"&&l.outreach!==fOut)return false;
     if(fCyc&&l.cycle!==fCyc)return false;
+    const sleeping=l.status==="Revisit"&&l.followUp&&l.followUp>today();
+    if(fView==="active"&&sleeping)return false;
+    if(fView==="due"&&!isDue(l))return false;
+    if(fView==="revisit"&&l.status!=="Revisit")return false;
     if(q){const hay=`${l.leadId} ${c.caseTitle} ${c.citation} ${l.firmDisplay} ${l.party} ${l.solicitors} ${(l.owners||[]).join(" ")}`.toLowerCase();if(!hay.includes(q))return false;}
     return true;
   });
   const pill=(v,map)=>v?`<span class="pill ${map[v]||"grey"}">${esc(v)}</span>`:`<span class="muted small">—</span>`;
   const oMap={"Positive":"green","No Response":"amber","Not Relevant":"grey","No Outreach":"grey"};
-  const sMap={"Ongoing":"green","Potential":"navy","Dead":"grey","Closed":"grey"};
+  const sMap={"Ongoing":"green","Potential":"navy","Revisit":"amber","Dead":"grey","Closed":"grey"};
   const rMap={"Work Won":"green","Quoted":"navy","Meeting Set":"navy","Relationship Developed":"navy"};
   document.getElementById("leadsBody").innerHTML=rows.map(l=>{
     const c=claimOf(l);
-    const overdue=l.followUp&&l.followUp<today()&&l.status!=="Closed"&&l.status!=="Dead";
+    const overdue=isDue(l);
     return `<tr class="leadrow ${openLead===l.id?"exp":""}" onclick="toggleLead('${l.id}')" style="cursor:pointer">
       <td><span class="docket ${l.side==="Intelligence"?"int":""}">${esc(l.leadId)}</span></td>
       <td><strong>${esc(c.caseTitle||"")}</strong><br><span class="small muted">${esc(l.party)}</span></td>
-      <td>${esc(l.firmDisplay)}<br><span class="small muted">${esc(l.solicitors)}</span></td>
+      <td>${esc(l.firmDisplay)}<br><span class="small muted">${esc(l.solicitors)}</span>${activityChip(l)}</td>
       <td>${l.ownership==="Claim Requested"?`<span class="pill amber">Requested: ${esc((l.claimedBy||"").replace(/<[^>]*>/,"").trim())}</span>`:l.ownership==="Available to Claim"?`<span class="pill orange">Available to claim</span>`:esc((l.owners||[]).join(", "))}</td>
       <td>${pill(l.outreach,oMap)}</td><td>${pill(l.status,sMap)}</td><td>${pill(l.result,rMap)}</td>
-      <td>${l.followUp?`<span class="${overdue?'mono small':'mono small muted'}" style="${overdue?'color:var(--bad);font-weight:600':''}">${esc(l.followUp)}</span>`:`<span class="muted small">—</span>`}</td>
+      <td>${l.followUp?`<span class="mono small" style="${overdue?'color:var(--bad);font-weight:600':'color:var(--slate)'}">${esc(l.followUp)}</span><br><span class="small ${overdue?'':'muted'}" style="${overdue?'color:var(--bad)':''}">${esc(dueLabel(l))}</span>`:`<span class="muted small">—</span>`}</td>
     </tr>${openLead===l.id?leadDetail(l,c):""}`;
   }).join("")||`<tr><td colspan="8" class="muted">No leads match. Publish drafts to create leads.</td></tr>`;
 }
-function toggleLead(id){openLead=openLead===id?null:id;renderLeads();}
+function toggleLead(id){
+  const opening=openLead!==id;
+  openLead=opening?id:null;
+  renderLeads();
+  if(opening)requestAnimationFrame(()=>{
+    const r=document.querySelector(".leadrow.exp");
+    if(r&&r.scrollIntoView)r.scrollIntoView({block:"start",behavior:"smooth"});
+  });
+}
 function emailSection(l){
   if(!l.email)return `<p class="small muted" style="margin-top:10px">No email draft for this lead — drafts are generated in LexExtract Studio and arrive with the cycle import.</p>`;
   const e=l.email;
@@ -558,20 +651,37 @@ function emailSection(l){
 }
 function leadDetail(l,c){
   const sel=(k,opts)=>`<select onclick="event.stopPropagation()" onchange="updLead('${l.id}','${k}',this.value)"><option value="">—</option>${opts.map(o=>`<option ${l[k]===o?"selected":""}>${o}</option>`).join("")}</select>`;
-  return `<tr class="leaddetail" onclick="event.stopPropagation()"><td colspan="8">
+  return `<tr class="leaddetail" onclick="event.stopPropagation()"><td colspan="8"><div class="leadpanel" id="panel-${l.id}">
+    <div class="phead"><span class="docket ${l.side==="Intelligence"?"int":""}">${esc(l.leadId)}</span>
+      <span class="pt">${esc(c.caseTitle||"")}</span>
+      <span class="small muted" style="margin-left:auto">${esc(l.firmDisplay)}</span>
+      <button class="btn ghost sm" onclick="toggleLead('${l.id}')">Close</button></div>
     <p class="small" style="margin-bottom:8px"><strong>${esc(c.citation||"")}</strong> · ${esc(c.value||"no value")} · issued ${esc(c.date||"n/d")}${l.inHouse?` · in-house: ${esc(l.inHouse)}`:""}</p>
-    <p class="small muted" style="margin-bottom:10px;white-space:pre-wrap">${esc((c.summary||"").split("\n\n")[0]||"")}</p>
+    <p class="small muted psum" style="margin-bottom:10px;white-space:pre-wrap">${esc((c.summary||"").split("\n\n")[0]||"")}</p>
     <div class="fieldgrid" style="margin-bottom:10px">
       <div><label>Outreach</label>${sel("outreach",["No Outreach","No Response","Not Relevant","Positive"])}</div>
       <div><label>Contact used</label>${sel("contactType",["Matter solicitor","Known firm contact","In-house contact","Other"])}</div>
       <div><label>Outreach date</label><input type="date" value="${esc(l.outreachDate)}" onchange="updLead('${l.id}','outreachDate',this.value)"></div>
-      <div><label>Status</label>${sel("status",["Dead","Potential","Ongoing","Closed"])}</div>
+      <div><label>Status</label>${sel("status",["Dead","Potential","Ongoing","Revisit","Closed"])}</div>
       <div><label>Result</label>${sel("result",["Relationship Developed","Meeting Set","Quoted","Work Won"])}</div>
       <div><label>Est. value (USD)</label><input value="${esc(l.estUSD)}" onchange="updLead('${l.id}','estUSD',this.value)"></div>
       <div><label>Billed to date (USD)</label><input value="${esc(l.billedUSD)}" onchange="updLead('${l.id}','billedUSD',this.value)"></div>
       <div><label>Follow-up date</label><input type="date" value="${esc(l.followUp)}" onchange="updLead('${l.id}','followUp',this.value)"></div>
       <div><label>Salesforce link</label><input value="${esc(l.salesforce)}" placeholder="paste URL" onchange="updLead('${l.id}','salesforce',this.value)"></div>
       <div><label>Owners</label><input value="${esc((l.owners||[]).join(", "))}" onchange="updLeadOwners('${l.id}',this.value)"></div>
+    </div>
+    <div class="sidebox" style="margin-top:0;margin-bottom:10px">
+      <h4>Revisit</h4>
+      ${l.status==="Revisit"&&!l.followUp?`<p class="small" style="color:var(--warn);margin-bottom:6px">⚠ Status is Revisit but no date is set — it will stay in the active list until you set one.</p>`:""}
+      ${l.followUp?`<p class="small" style="margin-bottom:6px">Scheduled for <strong class="mono">${esc(l.followUp)}</strong> — ${esc(dueLabel(l))}${l.status==="Revisit"&&!isDue(l)?" (hidden from the active list until then)":""}</p>`:`<p class="small muted" style="margin-bottom:6px">Told to check back later? Set a date and it drops out of the active list until then.</p>`}
+      <div class="row">
+        <button class="btn ghost sm" onclick="snooze('${l.id}',1)">1 month</button>
+        <button class="btn ghost sm" onclick="snooze('${l.id}',3)">3 months</button>
+        <button class="btn ghost sm" onclick="snooze('${l.id}',6)">6 months</button>
+        <button class="btn ghost sm" onclick="snooze('${l.id}',12)">12 months</button>
+        ${l.followUp?`<button class="btn sm" onclick="icsReminder('${l.id}')">Add calendar reminder</button>`:""}
+        ${isDue(l)?`<button class="btn sm" onclick="reactivate('${l.id}')">Mark as picked up</button>`:""}
+      </div>
     </div>
     <label class="small"><input type="checkbox" ${l.techWon?"checked":""} onchange="updLead('${l.id}','techWon',this.checked)"> Technology work won</label>
     &nbsp;&nbsp;<label class="small"><input type="checkbox" ${l.langWon?"checked":""} onchange="updLead('${l.id}','langWon',this.checked)"> Language work won</label>
@@ -592,7 +702,8 @@ function leadDetail(l,c){
       <div class="notehist">${(l.notes||[]).map(n=>`<div class="n"><span class="d">${esc(n.d)}</span>${esc(n.t)}</div>`).join("")||`<span class="small muted">No notes yet.</span>`}</div>
       <div class="row"><input id="note-${l.id}" class="grow" placeholder="Add a note…"><button class="btn sm" onclick="addNote('${l.id}')">Add</button></div>
     </div>
-  </td></tr>`;
+    <span class="grip">drag the bottom edge to resize</span>
+  </div></td></tr>`;
 }
 async function updLead(id,k,v){
   const l=S.leads.find(x=>x.id===id);
@@ -608,6 +719,51 @@ async function updLead(id,k,v){
     l[k]=prev;renderLeads();
     toast("Could not save that change: "+err.message,true);
   }
+}
+function addMonths(months){
+  const d=new Date();d.setMonth(d.getMonth()+months);
+  return d.toISOString().slice(0,10);
+}
+async function snooze(id,months){
+  const l=S.leads.find(x=>x.id===id);
+  const date=addMonths(months);
+  l.followUp=date;l.status="Revisit";renderLeads();
+  try{
+    const r=await api("lead",{method:"POST",body:{leadId:id,fields:{followUp:date,status:"Revisit"},
+      note:`Revisit scheduled for ${date} (${months} month${months===1?"":"s"})`,who:WHO}});
+    if(!r.ok)throw new Error("HTTP "+r.status);
+    const d=await r.json();VERSION=d.version;markClean();
+    toast(`Revisit set for ${date}. Add a calendar reminder so it doesn't rely on someone checking this list.`);
+  }catch(err){toast("Not saved: "+err.message,true);}
+}
+async function reactivate(id){
+  const l=S.leads.find(x=>x.id===id);
+  l.status="Ongoing";l.followUp="";renderLeads();
+  try{
+    const r=await api("lead",{method:"POST",body:{leadId:id,fields:{status:"Ongoing",followUp:""},note:"Revisit picked up",who:WHO}});
+    if(!r.ok)throw new Error("HTTP "+r.status);
+    const d=await r.json();VERSION=d.version;markClean();
+  }catch(err){toast("Not saved: "+err.message,true);}
+}
+function icsReminder(id){
+  const l=S.leads.find(x=>x.id===id);const c=claimOf(l);
+  if(!l.followUp){toast("Set a follow-up date first.",true);return;}
+  const stamp=s=>s.replace(/-/g,"");
+  const end=new Date(l.followUp);end.setDate(end.getDate()+1);
+  const uid=`${l.leadId}-${l.followUp}@lexextract`;
+  const fold=t=>t.replace(/\r?\n/g,"\\n");
+  const desc=fold([`Lead: ${l.leadId}`,`Firm: ${l.firmDisplay}`,`Case: ${c.caseTitle||""}`,
+    c.citation?`Citation: ${c.citation}`:"",`Board: ${location.origin}`,"",
+    "Previous outreach: "+(l.outreach||"none logged"),
+    (l.notes||[]).slice(-3).map(n=>`${n.d}: ${n.t}`).join("\n")].filter(Boolean).join("\n"));
+  const ics=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//LexExtract//EN","CALSCALE:GREGORIAN","BEGIN:VEVENT",
+    `UID:${uid}`,`DTSTAMP:${stamp(today())}T090000Z`,`DTSTART;VALUE=DATE:${stamp(l.followUp)}`,
+    `DTEND;VALUE=DATE:${stamp(end.toISOString().slice(0,10))}`,
+    `SUMMARY:Follow up: ${l.firmDisplay} — ${c.caseTitle||l.leadId}`,
+    `DESCRIPTION:${desc}`,"BEGIN:VALARM","TRIGGER:-PT9H","ACTION:DISPLAY",
+    `DESCRIPTION:Follow up ${l.leadId}`,"END:VALARM","END:VEVENT","END:VCALENDAR"].join("\r\n");
+  download(l.leadId.replace(/[^A-Za-z0-9-]+/g,"_")+"_followup.ics",new Blob([ics],{type:"text/calendar"}));
+  toast("Calendar file downloaded — open it to add the reminder to your Outlook calendar.");
 }
 async function updLeadOwners(id,v){
   const l=S.leads.find(x=>x.id===id);
@@ -654,16 +810,22 @@ async function addNote(id){
 function renderDash(){
   const pub=S.leads.length, contacted=S.leads.filter(l=>l.outreach&&l.outreach!=="No Outreach").length;
   const positive=S.leads.filter(l=>l.outreach==="Positive").length;
-  const overdue=S.leads.filter(l=>l.followUp&&l.followUp<today()&&!["Closed","Dead"].includes(l.status));
+  const overdue=S.leads.filter(l=>isDue(l));
+  const scheduled=S.leads.filter(l=>l.status==="Revisit"&&l.followUp&&l.followUp>today());
   const avail=S.leads.filter(l=>l.ownership==="Available to Claim").length;
   const conflicts=S.drafts.reduce((n,d)=>n+(d.conflicts||[]).filter(c=>!c.chosen).length,0);
   document.getElementById("dashStats").innerHTML=[
     ["Claims published",S.claims.length],["Leads",pub],["Contacted",contacted],["Positive",positive],
-    ["Drafts awaiting review",S.drafts.length],["Available to claim",avail]
+    ["Due now",overdue.length],["Scheduled revisits",scheduled.length],["Available to claim",avail]
   ].map(([l,v])=>`<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("");
   let alerts="";
   if(conflicts)alerts+=`<div class="card"><strong>⚠ ${conflicts} unresolved conflict(s)</strong> in drafts — <a href="#" onclick="show('review');return false">resolve in Review</a>.</div>`;
-  if(overdue.length)alerts+=`<div class="card"><strong>${overdue.length} overdue follow-up(s)</strong><br>`+overdue.slice(0,8).map(l=>`<span class="docket" style="margin:3px 4px 0 0;display:inline-block">${esc(l.leadId)}</span> ${esc((l.owners||[]).join(", ")||"unassigned")} — due ${esc(l.followUp)}`).join("<br>")+`</div>`;
+  if(overdue.length)alerts+=`<div class="card"><strong>${overdue.length} follow-up(s) due now</strong>
+    <p class="small muted" style="margin:4px 0 8px">Scheduled revisits that have come around, plus anything else past its date.</p>`+
+    overdue.slice(0,10).map(l=>`<div style="padding:3px 0"><span class="docket" style="margin-right:6px">${esc(l.leadId)}</span>${esc(l.firmDisplay)} · ${esc((l.owners||[]).join(", ")||"unassigned")} · due ${esc(l.followUp)}</div>`).join("")+
+    `<button class="btn sm" style="margin-top:8px" onclick="show('leads');document.getElementById('lf-view').value='due';renderLeads();">Open due list</button></div>`;
+  if(scheduled.length)alerts+=`<div class="card"><strong>${scheduled.length} revisit(s) scheduled</strong>
+    <p class="small muted" style="margin:4px 0 0">Hidden from the active list until their dates arrive. Next: ${esc(scheduled.map(l=>l.followUp).sort()[0]||"")}.</p></div>`;
   if(!alerts)alerts=`<div class="card muted">Nothing needs attention.</div>`;
   document.getElementById("dashAlerts").innerHTML=alerts;
 }
@@ -1093,4 +1255,3 @@ async function exportRoundup(){
 </script>
 </body>
 </html>
-
