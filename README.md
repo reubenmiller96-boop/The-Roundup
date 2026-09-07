@@ -55,6 +55,11 @@ export the cycle package → import it here.
   idle, and there is a manual "Refresh from server" button in Data.
 - **Claiming**: any unassigned lead shows "Claim this lead for <your name>" — one click,
   no approval step.
+- **Revisits**: told to check back in six months? Open the lead, click the 1/3/6/12 month
+  button. The lead's status becomes Revisit, it drops out of the default "Active" view
+  until the date arrives, then reappears under "Due now" on the dashboard and in the
+  leads view filter. Click "Add calendar reminder" to put it in your own Outlook calendar
+  as well — that is the only part that will chase you without you opening the site.
 
 ## Backups
 
