@@ -55,6 +55,12 @@ export the cycle package → import it here.
   idle, and there is a manual "Refresh from server" button in Data.
 - **Claiming**: any unassigned lead shows "Claim this lead for <your name>" — one click,
   no approval step.
+- **Firm assignments**: importing a cycle or updating a firm mapping assigns eligible
+  unassigned leads to that firm's AEs and repairs stale firm links. Existing affected
+  leads are also repaired and saved when shared data is loaded. Canonical names and
+  aliases must match uniquely; ambiguous matches and Chambers are not auto-assigned.
+  Existing owners, pending claims, and outreach history are preserved. Manually clearing
+  a lead's Owners keeps it unassigned rather than assigning it again automatically.
 - **Revisits**: told to check back in six months? Open the lead, click the 1/3/6/12 month
   button. The lead's status becomes Revisit, it drops out of the default "Active" view
   until the date arrives, then reappears under "Due now" on the dashboard and in the
