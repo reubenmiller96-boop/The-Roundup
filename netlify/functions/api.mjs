@@ -1,4 +1,5 @@
 import { getStore } from "@netlify/blobs";
+import { reconcileLeadAssignments } from "../../public/firm-assignment.mjs";
 
 const KEY = "lexextract-state";
 const json = (obj, status = 200) =>
@@ -47,6 +48,7 @@ export default async (req) => {
       if (cur.state && Number(version) !== Number(cur.version)) {
         return json({ conflict: true, version: cur.version, state: cur.state }, 409);
       }
+      reconcileLeadAssignments(state);
       const next = { version: (cur.version || 0) + 1, state, savedBy: who || "", savedAt: new Date().toISOString() };
       await store.setJSON(KEY, next);
       return json({ version: next.version, savedAt: next.savedAt, savedBy: next.savedBy });
@@ -63,6 +65,7 @@ export default async (req) => {
       Object.entries(fields || {}).forEach(([k, v]) => {
         if (lead[k] !== v) { changed.push(k); lead[k] = v; }
       });
+      if (Object.hasOwn(fields || {}, "owners")) lead.assignmentSource = "manual";
       lead.notes = lead.notes || [];
       if (note) lead.notes.push({ d: new Date().toISOString().slice(0, 10), t: `${note}${who ? ` — ${who}` : ""}` });
       if (changed.length) {

@@ -199,7 +199,7 @@ details.adv summary{cursor:pointer;color:var(--slate);font-size:12.5px}
 
 <section class="view" id="v-firms">
   <h2>Firms &amp; AE mapping</h2>
-  <p class="sub">Canonical firm names, aliases and AE owners. This drives lead assignment at publish.</p>
+  <p class="sub">Canonical firm names, aliases and AE owners. Mappings assign unassigned leads on import and when updated; existing owners and pending claims are preserved.</p>
   <div class="card">
     <div class="row">
       <button class="btn" onclick="document.getElementById('firmsXlsx').click()">Import from roundup workbook (.xlsx)</button>
@@ -280,6 +280,8 @@ details.adv summary{cursor:pointer;color:var(--slate);font-size:12.5px}
 const NAV = [["dash","Dashboard"],["leads","Leads",()=>S.leads.length],["firms","Firms",()=>S.firms.length],["reports","Reports"],["data","Data"]];
 let S = blankState();
 let dirty = false;
+let firmAssignment;
+const firmAssignmentReady=import("./firm-assignment.mjs").then(module=>{firmAssignment=module;});
 
 function blankState(){return {version:2, settings:{name:"",email:"",intCounter:{}}, firms:[], claims:[], drafts:[], leads:[], log:[]};}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
@@ -311,6 +313,7 @@ async function pushState(){
   if(saving){pendingSave=true;return;}
   saving=true;
   try{
+    reconcileAssignments();
     const r=await api("state",{method:"POST",body:{version:VERSION,state:S,who:WHO}});
     if(r.status===409){
       const c=await r.json();
@@ -336,10 +339,12 @@ async function pullState(quiet){
     const d=await r.json();
     if(d.state&&d.version!==VERSION){
       VERSION=d.version;S=migrate(d.state);
+      const repairs=reconcileAssignments();
       refreshNav();rerenderCurrent();
       if(!quiet)toast("Loaded shared data (v"+VERSION+").");
       else if(d.savedBy&&d.savedBy!==WHO)toast("Updated by "+d.savedBy+".");
       markClean();
+      if(repairs.changed)markDirty();
     }else if(!d.state&&!quiet){
       toast("No shared data yet — import your firms and run a cycle, or load a JSON backup.");
     }
@@ -363,6 +368,7 @@ async function doLogin(){
   if(!pass||!name){err.textContent="Both the passcode and your name are required.";return;}
   err.textContent="Checking…";
   try{
+    await firmAssignmentReady;
     const r=await fetch("/api/login",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({pass})});
     const d=await r.json();
     if(!d.ok){err.textContent=d.error||"Passcode not recognised.";return;}
@@ -393,7 +399,7 @@ async function restoreCache(){
 function solsFromString(str,role){return String(str||"").split(/;|,/).map(x=>x.trim()).filter(Boolean).map((n,i)=>({name:n,role:i===0?(role||""):""}));}
 function migrate(s){
   const b=blankState();const st=Object.assign(b,s,{settings:Object.assign(b.settings,s.settings||{})});
-  (st.firms||[]).forEach(f=>{f.aes=(f.aes||[]).filter(a=>!AE_NA.test(String(a).trim()));});
+  (st.firms||[]).forEach(f=>{f.aes=firmAssignment.cleanAEs(f.aes||[]);});
   const upFirm=f=>{
     if(!f.sols){f.sols=solsFromString(f.lawyers,f.role);if(!f.sols.length&&val(f.role))f.sols=[{name:"",role:f.role}];}
     if(f.actsFor===undefined)f.actsFor="";};
@@ -424,22 +430,18 @@ function refreshNav(){renderNav();const on=document.querySelector(".view.on");if
 
 /* ============ firm normalisation & matching ============ */
 function normFirm(s){
-  return String(s||"").toLowerCase()
-    .replace(/&/g," and ")
-    .replace(/[^a-z0-9 ]/g," ")
-    .replace(/\b(llp|llc|ltd|limited|plc|lp|the|uk|solicitors|solicitor|law firm|lawyers|legal)\b/g," ")
-    .replace(/\s+/g," ").trim();
+  return firmAssignment.normalizeFirm(s);
 }
 function matchFirm(name){
-  const n=normFirm(name); if(!n)return null;
-  for(const f of S.firms){
-    if(normFirm(f.canonical)===n)return f;
-    if((f.aliases||[]).some(a=>normFirm(a)===n))return f;
-  }
-  return null;
+  const matches=firmAssignment.matchingFirms(S.firms,name);
+  return matches.length===1?matches[0]:null;
 }
-const AE_NA=/^(n\/?a|na|n|a|unassigned|none|tbc|-{1,3}|\?+)$/i;
-function splitAEs(s){return String(s||"").split(/[\/,&+]| and /i).map(x=>x.trim()).filter(x=>x&&!AE_NA.test(x));}
+function splitAEs(s){return firmAssignment.cleanAEs(s);}
+function reconcileAssignments(){
+  const report=firmAssignment.reconcileLeadAssignments(S);
+  if(report.changed)logAct(`Firm mapping repair: ${report.assigned} leads assigned, ${report.linked} firm links repaired, ${report.statusFixed} ownership statuses corrected`);
+  return report;
+}
 
 /* ============ firms tab ============ */
 function importFirmsXlsx(file){
@@ -454,6 +456,7 @@ function importFirmsXlsx(file){
       const take=(name,ae)=>{
         name=String(name||"").trim(); if(!name||/^firm name$/i.test(name)||/^law firm$/i.test(name))return;
         const aes=splitAEs(ae);
+        if(firmAssignment.matchingFirms(S.firms,name).length>1)return;
         const ex=matchFirm(name);
         if(ex){ // merge AEs, keep alias if display differs
           aes.forEach(a=>{if(!ex.aes.some(x=>x.toLowerCase()===a.toLowerCase()))ex.aes.push(a);});
@@ -467,6 +470,7 @@ function importFirmsXlsx(file){
       // table 1: cols A,B  |  table 2: cols D,E (embedded second table)
       rows.forEach(row=>{take(row[0],row[1]);take(row[3],row[4]);});
       S.firms.sort((a,b)=>a.canonical.localeCompare(b.canonical));
+      reconcileAssignments();
       logAct(`Firms import: ${added} added, ${merged} merged from ${file.name}`);
       markDirty();renderFirms();refreshNav();
       toast(`Firms imported: ${added} added, ${merged} merged. Chambers auto-tagged and excluded from assignment.`);
@@ -488,8 +492,9 @@ function renderFirms(){
 }
 function updFirm(id,k,v){const f=S.firms.find(x=>x.id===id);if(!f)return;
   if(k==="aliases")f.aliases=v.split(";").map(x=>x.trim()).filter(Boolean);
-  else if(k==="aes")f.aes=v.split(",").map(x=>x.trim()).filter(Boolean);
+  else if(k==="aes")f.aes=splitAEs(v);
   else f[k]=v;
+  reconcileAssignments();
   markDirty();}
 function delFirm(id){S.firms=S.firms.filter(f=>f.id!==id);markDirty();renderFirms();refreshNav();}
 
@@ -769,9 +774,9 @@ async function updLeadOwners(id,v){
   const l=S.leads.find(x=>x.id===id);
   const owners=v.split(",").map(x=>x.trim()).filter(Boolean);
   const ownership=owners.length?"Assigned":"Available to Claim";
-  l.owners=owners;l.ownership=ownership;renderLeads();
+  l.owners=owners;l.ownership=ownership;l.assignmentSource="manual";renderLeads();
   try{
-    const r=await api("lead",{method:"POST",body:{leadId:id,fields:{owners,ownership},who:WHO}});
+    const r=await api("lead",{method:"POST",body:{leadId:id,fields:{owners,ownership,assignmentSource:"manual"},who:WHO}});
     if(!r.ok)throw new Error("HTTP "+r.status);
     const d=await r.json();VERSION=d.version;markClean();
   }catch(err){toast("Owner change not saved: "+err.message,true);}
@@ -893,6 +898,7 @@ function loadJson(file){
       const incoming=migrate(JSON.parse(e.target.result));
       if(dirty&&!window.__forceLoad){toast("You have unsaved changes. Click Load again within 10s to overwrite them.",true);window.__forceLoad=true;setTimeout(()=>window.__forceLoad=false,10000);document.getElementById("loadJsonInput").value="";return;}
       S=incoming;window.__forceLoad=false;
+      reconcileAssignments();
       logAct(`Backup restored by ${WHO} (${file.name})`);
       refreshNav();show("dash");markDirty();
       toast(`Loaded ${file.name}: ${S.claims.length} claims, ${S.leads.length} leads, ${S.firms.length} firms.`);
@@ -1110,12 +1116,14 @@ function importPackage(file){
     let pkg;
     try{pkg=JSON.parse(e.target.result);}catch(err){toast("That isn't a valid cycle package.",true);return;}
     if(!pkg||!Array.isArray(pkg.claims)||!Array.isArray(pkg.leads)){toast("That file doesn't look like a cycle package (no claims/leads).",true);return;}
-    const rep={firmsAdded:0,claimsAdded:0,claimsUpdated:0,leadsAdded:0,leadsSkipped:0,emailsAdded:0};
+    const rep={firmsAdded:0,firmsAmbiguous:0,claimsAdded:0,claimsUpdated:0,leadsAdded:0,leadsSkipped:0,emailsAdded:0};
+    const firmIdMap=Object.create(null);
     // firms: add unknown ones, merge AEs, never clobber existing mappings
     (pkg.firms||[]).forEach(f=>{
+      if(firmAssignment.matchingFirms(S.firms,f.canonical).length>1){rep.firmsAmbiguous++;return;}
       const ex=matchFirm(f.canonical);
-      if(!ex){S.firms.push(Object.assign({},f,{id:uid()}));rep.firmsAdded++;}
-      else{(f.aes||[]).forEach(a=>{if(!ex.aes.some(x=>x.toLowerCase()===a.toLowerCase()))ex.aes.push(a);});
+      if(!ex){const nf=Object.assign({},f,{id:uid(),aes:firmAssignment.cleanAEs(f.aes||[]),aliases:[...(f.aliases||[])]});S.firms.push(nf);firmIdMap[f.id]=nf.id;rep.firmsAdded++;}
+      else{firmIdMap[f.id]=ex.id;(firmAssignment.cleanAEs(f.aes||[])).forEach(a=>{if(!ex.aes.some(x=>x.toLowerCase()===a.toLowerCase()))ex.aes.push(a);});
            (f.aliases||[]).forEach(al=>{if(!(ex.aliases||[]).some(x=>x.toLowerCase()===al.toLowerCase()))ex.aliases.push(al);});}
     });
     // claims by claim number
@@ -1137,18 +1145,20 @@ function importPackage(file){
         rep.leadsSkipped++;
         return;
       }
-      const nl=Object.assign({},l,{id:uid(),claimId:idMap[l.claimId]||l.claimId});
+      const nl=Object.assign({},l,{id:uid(),claimId:idMap[l.claimId]||l.claimId,firmId:firmIdMap[l.firmId]||l.firmId});
       nl.notes=nl.notes||[];
       if(nl.email)rep.emailsAdded++;
       S.leads.push(nl);rep.leadsAdded++;
     });
+    const repairs=reconcileAssignments();
     logAct(`Cycle "${pkg.cycle||"?"}" imported by ${WHO}: +${rep.claimsAdded} claims, +${rep.leadsAdded} leads`);
     markDirty();refreshNav();
     document.getElementById("pkgReport").innerHTML=
       `<strong>Imported cycle ${esc(pkg.cycle||"")}</strong><br>`+
       `Claims: ${rep.claimsAdded} added, ${rep.claimsUpdated} updated.<br>`+
-      `Leads: ${rep.leadsAdded} added, ${rep.leadsSkipped} already present (left untouched).<br>`+
-      `Email drafts attached: ${rep.emailsAdded}. Firms added: ${rep.firmsAdded}.`;
+      `Leads: ${rep.leadsAdded} added, ${rep.leadsSkipped} already present (outreach and existing owners preserved).<br>`+
+      `Assignments repaired: ${repairs.assigned}. Firm links repaired: ${repairs.linked}. Ownership statuses corrected: ${repairs.statusFixed}.<br>`+
+      `Email drafts attached: ${rep.emailsAdded}. Firms added: ${rep.firmsAdded}. Ambiguous firm mappings skipped: ${rep.firmsAmbiguous}.`;
     toast(`Imported: ${rep.claimsAdded} claims, ${rep.leadsAdded} leads.`);
     document.getElementById("pkgInput").value="";
   };
@@ -1206,7 +1216,7 @@ function approveClaim(id){
 function rejectClaim(id){
   const l=S.leads.find(x=>x.id===id);
   l.notes.push({d:today(),t:`Claim by ${l.claimedBy||"unknown"} rejected${S.settings.name?" — "+S.settings.name:""}`});
-  l.ownership="Available to Claim";l.claimedBy="";l.claimedAt="";
+  l.ownership="Available to Claim";l.claimedBy="";l.claimedAt="";l.assignmentSource="manual";
   logAct(`Claim rejected: ${l.leadId}`);
   markDirty();renderLeads();
 }
