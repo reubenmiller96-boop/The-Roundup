@@ -136,6 +136,24 @@ tr:hover td{background:#FBFAF6}
 #leadsWrap{border:1px solid var(--line);border-radius:6px;overflow:visible;background:#fff}
 .actchip{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--slate);background:#EFECE4;border-radius:9px;padding:1px 7px;margin-top:3px;white-space:nowrap}
 .actchip .dot{width:5px;height:5px;border-radius:50%;background:var(--good);display:inline-block}
+/* excluded (dead-end) leads: greyed, still readable, never counted in rates */
+.leadrow.xl>td{background:#F1EFEA;color:var(--slate)}
+.leadrow.xl>td strong{color:var(--slate);font-weight:600}
+.leadrow.xl .docket{border-color:#A9AFB8;color:#7B8592}
+.xlbox{border:1px dashed #B9B4A8;background:#F1EFEA;border-radius:5px;padding:10px;margin-bottom:10px}
+tr.bl td{background:#F1EFEA}
+tr.bl td input.canon{color:var(--slate);text-decoration:line-through;text-decoration-color:rgba(179,38,30,.5)}
+/* cases tab */
+.caserow{cursor:pointer}
+.caserow.exp>td{background:#EDF1F7 !important;box-shadow:inset 0 2px 0 var(--navy)}
+.caserow.exp>td:first-child{box-shadow:inset 4px 0 0 var(--orange),inset 0 2px 0 var(--navy)}
+.casedetail>td{background:#FBFAF7 !important;padding:16px 18px;border-bottom:2px solid var(--navy)}
+.casedetail .psum{max-width:105ch;white-space:pre-wrap;font-size:13px;line-height:1.55;margin-bottom:12px}
+.mini{width:100%;border-collapse:collapse;font-size:12.5px;background:#fff;border:1px solid var(--line)}
+.mini th{position:static;font-size:10.5px;padding:6px 8px}
+.mini td{padding:6px 8px}
+.mini tr.xl td{color:var(--slate);background:#F4F2EE}
+.valnote{font-size:11px;color:var(--warn)}
 .notehist{border-left:3px solid var(--line);padding-left:10px;margin:6px 0}
 .notehist .n{margin-bottom:6px;font-size:12.5px}
 .notehist .n .d{color:var(--slate);font-family:var(--ff-mono);font-size:11px;margin-right:6px}
@@ -161,7 +179,7 @@ details.adv summary{cursor:pointer;color:var(--slate);font-size:12.5px}
 </div>
 <div id="app" style="display:none;width:100%">
 <aside id="side">
-  <div class="brand"><h1>Lex<span>Extract</span></h1><small>Web · build 4</small></div>
+  <div class="brand"><h1>Lex<span>Extract</span></h1><small>Web · build 5</small></div>
   <nav id="nav"></nav>
   <div class="foot"><span class="dot" id="saveDot"></span><span id="saveLbl">Saved</span><br><span id="whoLbl"></span></div>
 </aside>
@@ -188,6 +206,8 @@ details.adv summary{cursor:pointer;color:var(--slate);font-size:12.5px}
         <option value="active">Active (hides scheduled revisits)</option>
         <option value="due">Due now</option>
         <option value="revisit">Scheduled revisits</option>
+        <option value="live">Hide excluded</option>
+        <option value="excluded">Excluded only</option>
         <option value="all">Everything</option>
       </select>
     </div>
@@ -195,6 +215,29 @@ details.adv summary{cursor:pointer;color:var(--slate);font-size:12.5px}
   <div id="leadsWrap"><table id="leadsTable"><thead><tr>
     <th>Lead</th><th>Case</th><th>Firm</th><th>Owners</th><th>Outreach</th><th>Status</th><th>Result</th><th>Follow-up</th>
   </tr></thead><tbody id="leadsBody"></tbody></table></div>
+</section>
+
+<section class="view" id="v-cases">
+  <h2>Cases</h2>
+  <p class="sub">One row per case, with every claimant and defendant lead under it. Shows who has done outreach on what, and flags cases that look like repeats.</p>
+  <div class="statgrid" id="caseStats"></div>
+  <div class="card">
+    <div class="row">
+      <input id="cf-search" placeholder="Search case, claim number, party or firm…" class="grow" oninput="renderCases()">
+      <select id="cf-cycle" onchange="renderCases()"><option value="">All cycles</option></select>
+      <select id="cf-state" onchange="renderCases()">
+        <option value="">All cases</option>
+        <option value="untouched">No outreach yet</option>
+        <option value="progress">Outreach under way</option>
+        <option value="positive">Positive or better</option>
+        <option value="dead">All leads excluded</option>
+        <option value="repeat">Possible repeats</option>
+      </select>
+    </div>
+  </div>
+  <div id="casesWrap" style="border:1px solid var(--line);border-radius:6px;background:#fff"><table><thead><tr>
+    <th>Claim</th><th>Case</th><th>Cycle</th><th>Value</th><th>Leads</th><th>Outreach by</th><th>Furthest result</th><th>Flags</th>
+  </tr></thead><tbody id="casesBody"></tbody></table></div>
 </section>
 
 <section class="view" id="v-firms">
@@ -206,10 +249,12 @@ details.adv summary{cursor:pointer;color:var(--slate);font-size:12.5px}
       <input type="file" id="firmsXlsx" accept=".xlsx" style="display:none" onchange="importFirmsXlsx(this.files[0])">
       <button class="btn ghost" onclick="addFirm()">Add firm</button>
       <input id="firmSearch" placeholder="Search firms…" class="grow" oninput="renderFirms()">
+      <label class="small muted"><input type="checkbox" id="firmBlOnly" onchange="renderFirms()" style="vertical-align:middle"> Blacklisted only</label>
     </div>
     <p class="small muted" style="margin-top:8px">Import reads the Firms sheet (both embedded tables), trims whitespace, splits combined AEs like “Alys/Chids” into co-owners, and de-duplicates. Review before relying on it.</p>
+    <p class="small muted" style="margin-top:6px">Blacklisting a firm greys out its leads and keeps them out of response and close rates. Leads that already have a result recorded are left alone, and a salesperson can include an individual lead again if they think it can still close.</p>
   </div>
-  <div class="tblwrap"><table><thead><tr><th>Firm</th><th>Aliases</th><th>AEs</th><th>Type</th><th></th></tr></thead><tbody id="firmsBody"></tbody></table></div>
+  <div class="tblwrap"><table><thead><tr><th>Firm</th><th>Aliases</th><th>AEs</th><th>Type</th><th>Blacklist</th><th></th></tr></thead><tbody id="firmsBody"></tbody></table></div>
 </section>
 
 <section class="view" id="v-reports">
@@ -277,7 +322,7 @@ details.adv summary{cursor:pointer;color:var(--slate);font-size:12.5px}
 <div id="toast"></div>
 <script>
 /* ============ state, storage, utils ============ */
-const NAV = [["dash","Dashboard"],["leads","Leads",()=>S.leads.length],["firms","Firms",()=>S.firms.length],["reports","Reports"],["data","Data"]];
+const NAV = [["dash","Dashboard"],["cases","Cases",()=>S.claims.length],["leads","Leads",()=>S.leads.length],["firms","Firms",()=>S.firms.length],["reports","Reports"],["data","Data"]];
 let S = blankState();
 let dirty = false;
 let firmAssignment;
@@ -358,7 +403,7 @@ function rerenderCurrent(){
   const on=document.querySelector(".view.on");
   if(!on)return;
   const v=on.id.replace("v-","");
-  if(v==="dash")renderDash();else if(v==="review")renderDrafts();else if(v==="leads")renderLeads();
+  if(v==="dash")renderDash();else if(v==="cases")renderCases();else if(v==="leads")renderLeads();
   else if(v==="firms")renderFirms();else if(v==="reports")renderReports();else if(v==="data")renderData();
 }
 async function doLogin(){
@@ -399,14 +444,88 @@ async function restoreCache(){
 function solsFromString(str,role){return String(str||"").split(/;|,/).map(x=>x.trim()).filter(Boolean).map((n,i)=>({name:n,role:i===0?(role||""):""}));}
 function migrate(s){
   const b=blankState();const st=Object.assign(b,s,{settings:Object.assign(b.settings,s.settings||{})});
-  (st.firms||[]).forEach(f=>{f.aes=firmAssignment.cleanAEs(f.aes||[]);});
+  (st.firms||[]).forEach(f=>{f.aes=firmAssignment.cleanAEs(f.aes||[]);if(f.blacklist===undefined)f.blacklist=null;});
+  (st.claims||[]).forEach(c=>{if(c.valueBasis===undefined)c.valueBasis=detectBasis(c.value);});
   const upFirm=f=>{
     if(!f.sols){f.sols=solsFromString(f.lawyers,f.role);if(!f.sols.length&&val(f.role))f.sols=[{name:"",role:f.role}];}
     if(f.actsFor===undefined)f.actsFor="";};
   (st.drafts||[]).forEach(d=>{["clm","def"].forEach(k=>{const sd=d[k];if(!sd)return;(sd.firms||[]).forEach(upFirm);
     if(sd.inHouseName===undefined){sd.inHouseName=sd.inHouse||"";sd.inHouseRole="";}});});
-  (st.leads||[]).forEach(l=>{if(!l.sols)l.sols=solsFromString(l.solicitors,l.role);if(l.actsFor===undefined)l.actsFor="";});
+  (st.leads||[]).forEach(l=>{if(!l.sols)l.sols=solsFromString(l.solicitors,l.role);if(l.actsFor===undefined)l.actsFor="";if(l.excluded===undefined)l.excluded=null;if(!l.notes)l.notes=[];if(!l.owners)l.owners=[];});
   return st;
+}
+
+/* ============ claim value: amount + basis (set in Studio from the claim form) ============ */
+function detectBasis(s){
+  s=String(s||"").trim(); if(!s)return "";
+  if(/not more than|up to|less than|\bunder\b|no more than/i.test(s))return "maximum";
+  if(/\+|more than|\bover\b|exceed|at least|in excess/i.test(s))return "minimum";
+  if(/cannot say|unable to|unquantified|unspecified|not quantified/i.test(s))return "unquantified";
+  return "";
+}
+function cleanValue(s){
+  return String(s||"").replace(/\+/g,"").replace(/^\s*(?:not more than|no more than|more than|in excess of|at least|up to|less than|over|under|exceeding)\s*/i,"").trim();
+}
+function valueText(c){
+  const v=cleanValue(val(c.value)),b=c.valueBasis||detectBasis(c.value);
+  if(b==="unquantified")return "Unquantified";
+  if(!v)return "";
+  if(b==="minimum")return `${v}+`;
+  if(b==="maximum")return `Up to ${v}`;
+  return v;
+}
+function valueNote(c){
+  const b=c.valueBasis||detectBasis(c.value);
+  if(b==="minimum")return "Stated minimum from the claim form, not the claim's worth. Could be materially higher.";
+  if(b==="maximum")return "Stated maximum from the claim form.";
+  if(b==="unquantified")return "The claimant did not put a figure on the claim.";
+  return "";
+}
+function valueHtml(c,withNote){
+  const t=valueText(c);if(!t)return `<span class="muted">no value</span>`;
+  const n=valueNote(c);
+  const b=c.valueBasis||detectBasis(c.value);
+  if(!n)return esc(t);
+  return withNote?`${esc(t)} <span class="valnote">(${b==="minimum"?"stated minimum":b==="maximum"?"stated maximum":"unquantified"})</span>`
+    :`<span title="${esc(n)}">${esc(t)}${b==="minimum"?` <span class="valnote">min</span>`:""}</span>`;
+}
+
+/* ============ exclusions ============ */
+function isExcluded(l){return !!(l&&l.excluded);}
+function liveLeads(L){return (L||S.leads).filter(l=>!isExcluded(l));}
+function exclLabel(l){
+  if(!l.excluded)return "";
+  return l.excluded.scope==="Firm"?"Blacklisted firm":"Excluded";
+}
+
+/* ============ claim numbers and repeat detection ============ */
+function normClaim(s){return String(s||"").toUpperCase().replace(/\s+/g,"").replace(/\d+/g,n=>String(+n));}
+function partySegs(str){
+  const out=[];const rx=/\((\d+)\)\s*([^()]*?)(?=\s*\(\d+\)|$)/g;let m;
+  while((m=rx.exec(String(str||""))))out.push(m[2].replace(/[;,]\s*$/,"").trim());
+  return out;
+}
+function partyKeys(str){
+  const segs=partySegs(str);
+  const parts=segs.length?segs:String(str||"").split(/;|,(?![^()]*\))/);
+  return parts.map(p=>normFirm(String(p).replace(/\(\d+\)/g," "))).filter(x=>x.length>2);
+}
+function sameParties(a,b){
+  const ca=partyKeys(a.clmParty),da=partyKeys(a.defParty),cb=partyKeys(b.clmParty),db=partyKeys(b.defParty);
+  if(!ca.length||!da.length||!cb.length||!db.length)return false;
+  return ca.some(k=>cb.includes(k))&&da.some(k=>db.includes(k));
+}
+/* returns {claimId: [{id, claimNumber, why}]} for every claim that has a likely twin */
+function repeatMap(){
+  const map={};
+  const add=(a,b,why)=>{(map[a.id]=map[a.id]||[]).push({id:b.id,claimNumber:b.claimNumber,cycle:b.cycle,why});};
+  const C=S.claims;
+  for(let i=0;i<C.length;i++)for(let j=i+1;j<C.length;j++){
+    const a=C[i],b=C[j];
+    if(a.type!=="Intelligence"&&b.type!=="Intelligence"&&normClaim(a.claimNumber)&&normClaim(a.claimNumber)===normClaim(b.claimNumber)){add(a,b,"Same claim number");add(b,a,"Same claim number");}
+    else if(sameParties(a,b)){add(a,b,"Same claimant and defendant");add(b,a,"Same claimant and defendant");}
+  }
+  return map;
 }
 
 function show(view){
@@ -414,7 +533,7 @@ function show(view){
   document.getElementById("v-"+view).classList.add("on");
   document.querySelectorAll("#nav button").forEach(b=>b.classList.toggle("on",b.dataset.v===view));
   if(view==="dash")renderDash();
-  if(view==="review")renderDrafts();
+  if(view==="cases")renderCases();
   if(view==="leads")renderLeads();
   if(view==="firms")renderFirms();
   if(view==="reports")renderReports();
@@ -439,7 +558,8 @@ function matchFirm(name){
 function splitAEs(s){return firmAssignment.cleanAEs(s);}
 function reconcileAssignments(){
   const report=firmAssignment.reconcileLeadAssignments(S);
-  if(report.changed)logAct(`Firm mapping repair: ${report.assigned} leads assigned, ${report.linked} firm links repaired, ${report.statusFixed} ownership statuses corrected`);
+  if(report.assigned||report.linked||report.statusFixed)logAct(`Firm mapping repair: ${report.assigned} leads assigned, ${report.linked} firm links repaired, ${report.statusFixed} ownership statuses corrected`);
+  if(report.excluded||report.restored)logAct(`Blacklist applied: ${report.excluded||0} lead(s) greyed, ${report.restored||0} restored`);
   return report;
 }
 
@@ -481,14 +601,49 @@ function importFirmsXlsx(file){
 function addFirm(){S.firms.unshift({id:uid(),canonical:"New firm",aliases:[],aes:[],type:"Solicitors",notes:""});markDirty();renderFirms();}
 function renderFirms(){
   const q=(document.getElementById("firmSearch").value||"").toLowerCase();
-  const rows=S.firms.filter(f=>!q||f.canonical.toLowerCase().includes(q)||(f.aliases||[]).join(" ").toLowerCase().includes(q)||(f.aes||[]).join(" ").toLowerCase().includes(q));
-  document.getElementById("firmsBody").innerHTML=rows.map(f=>`<tr>
-    <td><input value="${esc(f.canonical)}" onchange="updFirm('${f.id}','canonical',this.value)" style="width:100%;min-width:160px"></td>
+  const blOnly=(document.getElementById("firmBlOnly")||{}).checked;
+  const rows=S.firms.filter(f=>(!blOnly||f.blacklist)&&(!q||f.canonical.toLowerCase().includes(q)||(f.aliases||[]).join(" ").toLowerCase().includes(q)||(f.aes||[]).join(" ").toLowerCase().includes(q)||(f.blacklist&&("blacklisted "+f.blacklist.reason).toLowerCase().includes(q))));
+  const greyCount=id=>S.leads.filter(l=>l.firmId===id&&l.excluded&&l.excluded.scope==="Firm").length;
+  document.getElementById("firmsBody").innerHTML=rows.map(f=>`<tr class="${f.blacklist?"bl":""}">
+    <td><input class="canon" value="${esc(f.canonical)}" onchange="updFirm('${f.id}','canonical',this.value)" style="width:100%;min-width:160px"></td>
     <td><input value="${esc((f.aliases||[]).join("; "))}" placeholder="alias; alias" onchange="updFirm('${f.id}','aliases',this.value)" style="width:100%;min-width:140px"></td>
     <td><input value="${esc((f.aes||[]).join(", "))}" placeholder="Unassigned" onchange="updFirm('${f.id}','aes',this.value)" style="width:100%;min-width:110px"></td>
     <td><select onchange="updFirm('${f.id}','type',this.value)">${["Solicitors","Chambers","Corporation","Other"].map(t=>`<option ${f.type===t?"selected":""}>${t}</option>`).join("")}</select></td>
+    <td style="min-width:220px">
+      <select onchange="setBlacklist('${f.id}',this.value,this)"><option value="" ${f.blacklist?"":"selected"}>Open</option><option value="bl" ${f.blacklist?"selected":""}>Blacklisted</option></select>
+      ${f.blacklist?`<label class="small muted" style="display:block;margin-top:4px">Reason (edit any time)</label>
+      <input value="${esc(f.blacklist.reason)}" placeholder="Reason (required)" onchange="updBlacklistReason('${f.id}',this)" style="width:100%">
+      <div class="small muted" style="margin-top:2px">${esc([f.blacklist.by,f.blacklist.at].filter(Boolean).join(", "))}${f.blacklist.editedAt?` · edited ${esc(f.blacklist.editedBy||"")} ${esc(f.blacklist.editedAt)}`:""} · ${greyCount(f.id)} lead(s) greyed</div>`:""}
+    </td>
     <td><button class="btn danger sm" onclick="delFirm('${f.id}')">Delete</button></td>
-  </tr>`).join("")||`<tr><td colspan="5" class="muted">No firms yet. Import your roundup workbook to build the mapping.</td></tr>`;
+  </tr>`).join("")||`<tr><td colspan="6" class="muted">${blOnly?"No blacklisted firms.":"No firms yet. Import your roundup workbook to build the mapping."}</td></tr>`;
+}
+function setBlacklist(id,v,sel){
+  const f=S.firms.find(x=>x.id===id);if(!f)return;
+  if(v==="bl"){
+    const reason=(prompt(`Why is ${f.canonical} a hard no? The reason shows on every greyed lead for this firm.`)||"").trim();
+    if(!reason){toast("A reason is required to blacklist a firm.",true);sel.value="";return;}
+    f.blacklist={reason,by:WHO||"",at:today()};
+    logAct(`${WHO||"Someone"} blacklisted ${f.canonical}: ${reason}`);
+  }else{
+    if(!f.blacklist)return;
+    logAct(`${WHO||"Someone"} lifted the blacklist on ${f.canonical} (was: ${f.blacklist.reason})`);
+    f.blacklist=null;
+  }
+  const rep=reconcileAssignments();
+  markDirty();renderFirms();
+  if(v==="bl")toast(`${f.canonical} blacklisted. ${rep.excluded||0} lead(s) greyed out; any with a result recorded were left as they are.`);
+  else toast(`Blacklist lifted. ${rep.restored||0} lead(s) back in play.`);
+}
+function updBlacklistReason(id,inp){
+  const f=S.firms.find(x=>x.id===id);if(!f||!f.blacklist)return;
+  const v=inp.value.trim();
+  if(!v){toast("The reason can't be blank. Set the firm back to Open instead.",true);inp.value=f.blacklist.reason;return;}
+  if(v===f.blacklist.reason)return;
+  logAct(`${WHO||"Someone"} changed the blacklist reason for ${f.canonical} from "${f.blacklist.reason}" to "${v}"`);
+  f.blacklist.reason=v;f.blacklist.editedBy=WHO||"";f.blacklist.editedAt=today();
+  reconcileAssignments();
+  markDirty();renderFirms();
 }
 function updFirm(id,k,v){const f=S.firms.find(x=>x.id===id);if(!f)return;
   if(k==="aliases")f.aliases=v.split(";").map(x=>x.trim()).filter(Boolean);
@@ -608,9 +763,13 @@ function renderLeads(){
     if(fView==="active"&&sleeping)return false;
     if(fView==="due"&&!isDue(l))return false;
     if(fView==="revisit"&&l.status!=="Revisit")return false;
-    if(q){const hay=`${l.leadId} ${c.caseTitle} ${c.citation} ${l.firmDisplay} ${l.party} ${l.solicitors} ${(l.owners||[]).join(" ")}`.toLowerCase();if(!hay.includes(q))return false;}
+    if(fView==="live"&&isExcluded(l))return false;
+    if(fView==="excluded"&&!isExcluded(l))return false;
+    if(q){const hay=`${l.leadId} ${c.caseTitle} ${c.citation} ${c.claimNumber||""} ${l.firmDisplay} ${l.party} ${l.solicitors} ${(l.owners||[]).join(" ")}`.toLowerCase();if(!hay.includes(q))return false;}
     return true;
   });
+  // excluded leads sink to the bottom, otherwise keep the existing order
+  rows.sort((a,b)=>(isExcluded(a)?1:0)-(isExcluded(b)?1:0));
   const pill=(v,map)=>v?`<span class="pill ${map[v]||"grey"}">${esc(v)}</span>`:`<span class="muted small">—</span>`;
   const oMap={"Positive":"green","No Response":"amber","Not Relevant":"grey","No Outreach":"grey"};
   const sMap={"Ongoing":"green","Potential":"navy","Revisit":"amber","Dead":"grey","Closed":"grey"};
@@ -618,11 +777,12 @@ function renderLeads(){
   document.getElementById("leadsBody").innerHTML=rows.map(l=>{
     const c=claimOf(l);
     const overdue=isDue(l);
-    return `<tr class="leadrow ${openLead===l.id?"exp":""}" onclick="toggleLead('${l.id}')" style="cursor:pointer">
-      <td><span class="docket ${l.side==="Intelligence"?"int":""}">${esc(l.leadId)}</span></td>
-      <td><strong>${esc(c.caseTitle||"")}</strong><br><span class="small muted">${esc(l.party)}</span></td>
+    const xl=isExcluded(l);
+    return `<tr class="leadrow ${openLead===l.id?"exp":""} ${xl?"xl":""}" onclick="toggleLead('${l.id}')" style="cursor:pointer">
+      <td><span class="docket ${l.side==="Intelligence"?"int":""}">${esc(l.leadId)}</span>${xl?`<br><span class="pill grey" style="margin-top:4px" title="${esc(l.excluded.reason||"")}">${esc(exclLabel(l))}</span>`:""}</td>
+      <td><strong>${esc(c.caseTitle||"")}</strong><br><span class="small muted">${esc(l.party)}</span>${xl&&l.excluded.reason?`<br><span class="small" style="font-style:italic">${esc(l.excluded.reason)}</span>`:""}</td>
       <td>${esc(l.firmDisplay)}<br><span class="small muted">${esc(l.solicitors)}</span>${activityChip(l)}</td>
-      <td>${l.ownership==="Claim Requested"?`<span class="pill amber">Requested: ${esc((l.claimedBy||"").replace(/<[^>]*>/,"").trim())}</span>`:l.ownership==="Available to Claim"?`<span class="pill orange">Available to claim</span>`:esc((l.owners||[]).join(", "))}</td>
+      <td>${xl&&!(l.owners||[]).length?`<span class="muted small">—</span>`:l.ownership==="Claim Requested"?`<span class="pill amber">Requested: ${esc((l.claimedBy||"").replace(/<[^>]*>/,"").trim())}</span>`:l.ownership==="Available to Claim"?`<span class="pill orange">Available to claim</span>`:esc((l.owners||[]).join(", "))}</td>
       <td>${pill(l.outreach,oMap)}</td><td>${pill(l.status,sMap)}</td><td>${pill(l.result,rMap)}</td>
       <td>${l.followUp?`<span class="mono small" style="${overdue?'color:var(--bad);font-weight:600':'color:var(--slate)'}">${esc(l.followUp)}</span><br><span class="small ${overdue?'':'muted'}" style="${overdue?'color:var(--bad)':''}">${esc(dueLabel(l))}</span>`:`<span class="muted small">—</span>`}</td>
     </tr>${openLead===l.id?leadDetail(l,c):""}`;
@@ -661,8 +821,10 @@ function leadDetail(l,c){
       <span class="pt">${esc(c.caseTitle||"")}</span>
       <span class="small muted" style="margin-left:auto">${esc(l.firmDisplay)}</span>
       <button class="btn ghost sm" onclick="toggleLead('${l.id}')">Close</button></div>
-    <p class="small" style="margin-bottom:8px"><strong>${esc(c.citation||"")}</strong> · ${esc(c.value||"no value")} · issued ${esc(c.date||"n/d")}${l.inHouse?` · in-house: ${esc(l.inHouse)}`:""}</p>
-    <p class="small muted psum" style="margin-bottom:10px;white-space:pre-wrap">${esc((c.summary||"").split("\n\n")[0]||"")}</p>
+    <p class="small" style="margin-bottom:4px">${[c.citation?`<strong>${esc(c.citation)}</strong>`:"",valueHtml(c,true),`issued ${esc(c.date||"n/d")}`,l.inHouse?`in-house: ${esc(l.inHouse)}`:""].filter(Boolean).join(" · ")}</p>
+    ${valueNote(c)?`<p class="valnote" style="margin-bottom:8px">${esc(valueNote(c))}</p>`:""}
+    ${exclusionBox(l)}
+    <div class="psum" style="margin-bottom:12px;white-space:pre-wrap;font-size:13px;line-height:1.55;color:#333">${esc(c.summary||"No summary.")}</div>
     <div class="fieldgrid" style="margin-bottom:10px">
       <div><label>Outreach</label>${sel("outreach",["No Outreach","No Response","Not Relevant","Positive"])}</div>
       <div><label>Contact used</label>${sel("contactType",["Matter solicitor","Known firm contact","In-house contact","Other"])}</div>
@@ -709,6 +871,59 @@ function leadDetail(l,c){
     </div>
     <span class="grip">drag the bottom edge to resize</span>
   </div></td></tr>`;
+}
+function exclusionBox(l){
+  const x=l.excluded;
+  if(!x){
+    const firm=l.firmId?S.firms.find(f=>f.id===l.firmId):null;
+    const overrideNote=l.excludeOverride&&firm&&firm.blacklist?`<p class="small muted" style="margin-bottom:6px">${esc(firm.canonical)} is blacklisted (${esc(firm.blacklist.reason)}), but this lead was included anyway${l.excludeOverride.by?` by ${esc(l.excludeOverride.by)}`:""}.</p>`:"";
+    return `${overrideNote}<div class="row" style="margin-bottom:10px"><button class="btn ghost sm" onclick="excludeLead('${l.id}')">Exclude as a dead end</button><span class="small muted">Greys the lead out and keeps it out of your response and close rates. Needs a reason.</span></div>`;
+  }
+  const firmWide=x.scope==="Firm";
+  return `<div class="xlbox">
+    <div class="row" style="margin-bottom:6px"><span class="pill grey">${firmWide?"Blacklisted firm":"Excluded as a dead end"}</span>
+      <span class="small muted">${esc([x.by,x.at].filter(Boolean).join(", "))}${x.editedAt?` · reason edited by ${esc(x.editedBy||"")} ${esc(x.editedAt)}`:""}</span></div>
+    ${firmWide?`<p class="small" style="margin-bottom:6px">Reason: ${esc(x.reason)}</p><p class="small muted" style="margin-bottom:6px">This comes from the firm's blacklist. Edit the reason on the Firms tab.</p>`
+      :`<label class="small muted" style="display:block">Reason (edit any time)</label><input value="${esc(x.reason)}" onchange="updExcludeReason('${l.id}',this)" style="width:100%;margin-bottom:6px">`}
+    <div class="row"><button class="btn sm" onclick="includeLead('${l.id}')">${firmWide?"Include this lead anyway":"Include again"}</button>
+      <span class="small muted">${firmWide?"Use this if you think this one can still close. The firm stays blacklisted.":"Puts the lead back into the active list and the rates."}</span></div>
+  </div>`;
+}
+async function saveLeadFields(id,fields,note,okMsg){
+  const l=S.leads.find(x=>x.id===id);
+  const prev={};Object.keys(fields).forEach(k=>prev[k]=l[k]);
+  Object.assign(l,fields);l.lastEditBy=WHO;l.lastEditAt=new Date().toISOString().slice(0,16).replace("T"," ");
+  if(note)l.notes.push({d:today(),t:`${note}${WHO?` — ${WHO}`:""}`});
+  renderLeads();
+  try{
+    const r=await api("lead",{method:"POST",body:{leadId:id,fields,note,who:WHO}});
+    if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error||("HTTP "+r.status));}
+    const d=await r.json();VERSION=d.version;markClean();
+    if(okMsg)toast(okMsg);
+  }catch(err){
+    Object.assign(l,prev);if(note)l.notes.pop();renderLeads();
+    toast("Not saved: "+err.message,true);
+  }
+}
+function excludeLead(id){
+  const l=S.leads.find(x=>x.id===id);
+  const reason=(prompt(`Why is ${l.leadId} a dead end? (e.g. firm uses an in-house team, we're conflicted, matter settled)`)||"").trim();
+  if(!reason){toast("A reason is required to exclude a lead.",true);return;}
+  saveLeadFields(id,{excluded:{scope:"Matter",reason,by:WHO||"",at:today()}},`Excluded as a dead end: ${reason}`,"Lead excluded. It no longer counts towards your rates.");
+}
+function includeLead(id){
+  const l=S.leads.find(x=>x.id===id);
+  if(!l.excluded)return;
+  const firmWide=l.excluded.scope==="Firm";
+  saveLeadFields(id,firmWide?{excluded:null,excludeOverride:{by:WHO||"",at:today()}}:{excluded:null},
+    firmWide?"Included despite firm blacklist":"Exclusion removed","Lead is back in play.");
+}
+function updExcludeReason(id,inp){
+  const l=S.leads.find(x=>x.id===id);if(!l.excluded)return;
+  const v=inp.value.trim();
+  if(!v){toast("The reason can't be blank. Use Include again instead.",true);inp.value=l.excluded.reason;return;}
+  if(v===l.excluded.reason)return;
+  saveLeadFields(id,{excluded:Object.assign({},l.excluded,{reason:v,editedBy:WHO||"",editedAt:today()})},`Exclusion reason changed to: ${v}`);
 }
 async function updLead(id,k,v){
   const l=S.leads.find(x=>x.id===id);
@@ -811,19 +1026,119 @@ async function addNote(id){
 }
 
 
+/* ============ cases (one row per claim, all its leads underneath) ============ */
+const RESULT_RANK=["","Relationship Developed","Meeting Set","Quoted","Work Won"];
+let openCase=null;
+function caseRoll(c){
+  const leads=S.leads.filter(l=>l.claimId===c.id);
+  const live=liveLeads(leads);
+  const touched=leads.filter(l=>l.outreach&&l.outreach!=="No Outreach");
+  const who=[...new Set(touched.flatMap(l=>(l.owners||[]).length?l.owners:[l.lastEditBy||"?"]))].filter(Boolean);
+  const best=leads.reduce((b,l)=>RESULT_RANK.indexOf(l.result)>RESULT_RANK.indexOf(b)?l.result:b,"");
+  const positive=leads.some(l=>l.outreach==="Positive")||!!best;
+  let state="untouched";
+  if(leads.length&&!live.length)state="dead";
+  else if(positive)state="positive";
+  else if(touched.length)state="progress";
+  return {leads,live,touched,who,best,positive,state,
+    clm:leads.filter(l=>l.sideTag==="CLM").length,def:leads.filter(l=>l.sideTag==="DEF").length,int:leads.filter(l=>l.sideTag==="INT").length};
+}
+function renderCases(){
+  fillSelect("cf-cycle",allCycles(),`<option value="">All cycles</option>`);
+  const q=(document.getElementById("cf-search").value||"").toLowerCase();
+  const fCyc=document.getElementById("cf-cycle").value, fState=document.getElementById("cf-state").value;
+  const reps=repeatMap();
+  const rolled=S.claims.map(c=>({c,r:caseRoll(c)}));
+  const scope=rolled.filter(({c})=>!fCyc||c.cycle===fCyc);
+  // headline numbers for the selected cycle
+  const nLeads=scope.reduce((n,x)=>n+x.r.leads.length,0), nLive=scope.reduce((n,x)=>n+x.r.live.length,0);
+  document.getElementById("caseStats").innerHTML=[
+    ["Cases",scope.length],["Leads made",nLeads],["Live leads",nLive],
+    ["Cases with outreach",scope.filter(x=>x.r.touched.length).length],
+    ["Cases positive or better",scope.filter(x=>x.r.state==="positive").length],
+    ["Possible repeats",scope.filter(x=>reps[x.c.id]).length]
+  ].map(([l,v])=>`<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("");
+  const rows=scope.filter(({c,r})=>{
+    if(fState==="repeat"){if(!reps[c.id])return false;}
+    else if(fState&&r.state!==fState)return false;
+    if(q){
+      const hay=`${c.claimNumber} ${c.caseTitle} ${c.citation} ${c.clmParty} ${c.defParty} ${r.leads.map(l=>l.firmDisplay+" "+(l.owners||[]).join(" ")).join(" ")}`.toLowerCase();
+      if(!hay.includes(q))return false;
+    }
+    return true;
+  }).sort((a,b)=>String(b.c.publishedAt||"").localeCompare(String(a.c.publishedAt||""))||String(a.c.claimNumber).localeCompare(String(b.c.claimNumber)));
+  const stPill={untouched:`<span class="pill grey">No outreach yet</span>`,progress:`<span class="pill amber">Under way</span>`,positive:`<span class="pill green">Positive</span>`,dead:`<span class="pill grey">All excluded</span>`};
+  document.getElementById("casesBody").innerHTML=rows.map(({c,r})=>{
+    const rep=reps[c.id];
+    const exp=openCase===c.id;
+    return `<tr class="caserow ${exp?"exp":""}" onclick="toggleCase('${c.id}')">
+      <td><span class="docket ${c.type==="Intelligence"?"int":""}">${esc(c.claimNumber||"—")}</span></td>
+      <td><strong>${esc(c.caseTitle||"")}</strong><br><span class="small muted">${esc(c.topics||"")}</span></td>
+      <td class="small">${esc(c.cycle||"")}</td>
+      <td class="small">${valueHtml(c,false)}</td>
+      <td class="small">${r.leads.length}${r.leads.length!==r.live.length?` <span class="muted">(${r.leads.length-r.live.length} excl.)</span>`:""}<br><span class="muted">${[r.clm?`${r.clm} clm`:"",r.def?`${r.def} def`:"",r.int?`${r.int} int`:""].filter(Boolean).join(" · ")}</span></td>
+      <td class="small">${r.who.length?esc(r.who.join(", ")):`<span class="muted">—</span>`}<br>${stPill[r.state]}</td>
+      <td>${r.best?`<span class="pill ${r.best==="Work Won"?"green":"navy"}">${esc(r.best)}</span>`:`<span class="muted small">—</span>`}</td>
+      <td>${rep?`<span class="pill red" title="${esc(rep.map(x=>`${x.claimNumber}: ${x.why}`).join("\n"))}">Possible repeat (${rep.length})</span>`:""}${c.status==="Updated"?` <span class="pill navy">Updated</span>`:""}</td>
+    </tr>${exp?caseDetail(c,r,rep):""}`;
+  }).join("")||`<tr><td colspan="8" class="muted">No cases match.</td></tr>`;
+}
+function toggleCase(id){openCase=openCase===id?null:id;renderCases();}
+function caseDetail(c,r,rep){
+  const row=l=>`<tr class="${isExcluded(l)?"xl":""}">
+    <td><span class="docket" style="font-size:11px">${esc(l.leadId)}</span></td>
+    <td>${esc(l.side)}${l.actsFor&&l.actsFor!=="All"?` <span class="muted">${esc(l.actsFor)}</span>`:""}</td>
+    <td>${esc(l.firmDisplay)}<br><span class="muted">${esc(l.solicitors||"")}</span></td>
+    <td>${esc((l.owners||[]).join(", ")||(l.ownership==="Available to Claim"?"Available to claim":"—"))}</td>
+    <td>${esc(l.outreach||"—")}${l.outreachDate?`<br><span class="muted mono">${esc(l.outreachDate)}</span>`:""}</td>
+    <td>${esc(l.status||"—")}</td><td>${esc(l.result||"—")}</td>
+    <td>${isExcluded(l)?`<span title="${esc(l.excluded.reason||"")}">${esc(exclLabel(l))}: ${esc(l.excluded.reason||"")}</span>`:""}</td>
+  </tr>`;
+  return `<tr class="casedetail" onclick="event.stopPropagation()"><td colspan="8">
+    <div class="row" style="margin-bottom:8px">
+      <strong>${esc(c.citation||c.caseTitle||"")}</strong>
+      <span class="small">${valueHtml(c,true)}</span>
+      <span class="small muted">issued ${esc(c.date||"n/d")} · published ${esc(c.publishedAt||"n/d")}</span>
+      <span style="flex:1"></span>
+      <button class="btn ghost sm" onclick="openCaseLeads('${c.id}')">Open these leads in Leads</button>
+      <button class="btn ghost sm" onclick="toggleCase('${c.id}')">Close</button>
+    </div>
+    ${valueNote(c)?`<p class="valnote" style="margin-bottom:8px">${esc(valueNote(c))}</p>`:""}
+    ${rep?`<div class="conflict" style="margin-bottom:10px"><strong class="small">Possible repeat</strong>
+      ${rep.map(x=>`<div class="small" style="margin-top:4px"><a href="#" onclick="openCase='${x.id}';renderCases();return false">${esc(x.claimNumber)}</a>${x.cycle?` (${esc(x.cycle)})`:""}: ${esc(x.why)}</div>`).join("")}
+      <p class="small muted" style="margin-top:6px">If it's the same matter entered twice, keep the one with outreach logged and delete the other's leads. If it's a related claim between the same parties, leave both and coordinate outreach.</p></div>`:""}
+    <p class="small muted" style="margin-bottom:4px">Claimant: ${esc(c.clmParty||"n/d")}${c.clmInHouse?` · in-house: ${esc(c.clmInHouse)}`:""}<br>Defendant: ${esc(c.defParty||"n/d")}${c.defInHouse?` · in-house: ${esc(c.defInHouse)}`:""}</p>
+    <div class="psum">${esc(c.summary||"No summary.")}</div>
+    <table class="mini"><thead><tr><th>Lead</th><th>Side</th><th>Firm</th><th>Owner</th><th>Outreach</th><th>Status</th><th>Result</th><th>Excluded</th></tr></thead>
+    <tbody>${r.leads.map(row).join("")||`<tr><td colspan="8" class="muted">No leads on this case.</td></tr>`}</tbody></table>
+  </td></tr>`;
+}
+function openCaseLeads(id){
+  const c=S.claims.find(x=>x.id===id);if(!c)return;
+  show("leads");
+  ["lf-ae","lf-side","lf-outreach","lf-cycle"].forEach(k=>{const e=document.getElementById(k);if(e)e.value="";});
+  document.getElementById("lf-view").value="all";
+  document.getElementById("lf-search").value=c.claimNumber||c.caseTitle||"";
+  renderLeads();
+}
+
 /* ============ dashboard ============ */
 function renderDash(){
-  const pub=S.leads.length, contacted=S.leads.filter(l=>l.outreach&&l.outreach!=="No Outreach").length;
-  const positive=S.leads.filter(l=>l.outreach==="Positive").length;
-  const overdue=S.leads.filter(l=>isDue(l));
-  const scheduled=S.leads.filter(l=>l.status==="Revisit"&&l.followUp&&l.followUp>today());
-  const avail=S.leads.filter(l=>l.ownership==="Available to Claim").length;
+  const LV=liveLeads();
+  const pub=LV.length, contacted=LV.filter(l=>l.outreach&&l.outreach!=="No Outreach").length;
+  const positive=LV.filter(l=>l.outreach==="Positive").length;
+  const overdue=LV.filter(l=>isDue(l));
+  const scheduled=LV.filter(l=>l.status==="Revisit"&&l.followUp&&l.followUp>today());
+  const avail=LV.filter(l=>l.ownership==="Available to Claim").length;
+  const nExcl=S.leads.length-LV.length;
   const conflicts=S.drafts.reduce((n,d)=>n+(d.conflicts||[]).filter(c=>!c.chosen).length,0);
+  const reps=repeatMap();const nRep=Object.keys(reps).length;
   document.getElementById("dashStats").innerHTML=[
-    ["Claims published",S.claims.length],["Leads",pub],["Contacted",contacted],["Positive",positive],
+    ["Cases",S.claims.length],["Live leads",pub],["Excluded leads",nExcl],["Contacted",contacted],["Positive",positive],
     ["Due now",overdue.length],["Scheduled revisits",scheduled.length],["Available to claim",avail]
   ].map(([l,v])=>`<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("");
   let alerts="";
+  if(nRep)alerts+=`<div class="card"><strong>${nRep} case(s) look like repeats</strong> of another case — <a href="#" onclick="show('cases');document.getElementById('cf-state').value='repeat';renderCases();return false">check them on the Cases tab</a>.</div>`;
   if(conflicts)alerts+=`<div class="card"><strong>⚠ ${conflicts} unresolved conflict(s)</strong> in drafts — <a href="#" onclick="show('review');return false">resolve in Review</a>.</div>`;
   if(overdue.length)alerts+=`<div class="card"><strong>${overdue.length} follow-up(s) due now</strong>
     <p class="small muted" style="margin:4px 0 8px">Scheduled revisits that have come around, plus anything else past its date.</p>`+
@@ -839,26 +1154,36 @@ function renderDash(){
 function renderReports(){
   fillSelect("rep-cycle",allCycles(),`<option value="">All cycles</option>`);
   const cyc=document.getElementById("rep-cycle").value;
-  const L=S.leads.filter(l=>!cyc||l.cycle===cyc);
+  const ALL=S.leads.filter(l=>!cyc||l.cycle===cyc);
+  // excluded (dead-end) leads are counted on their own and kept out of every rate below
+  const L=liveLeads(ALL), X=ALL.filter(isExcluded);
   const attempted=L.filter(l=>["No Response","Not Relevant","Positive"].includes(l.outreach));
   const responded=L.filter(l=>["Not Relevant","Positive"].includes(l.outreach));
+  const won=L.filter(l=>l.result==="Work Won");
+  const pct=(a,b)=>b?Math.round(a/b*100)+"%":"–";
   const num=s=>parseFloat(String(s||"").replace(/[^0-9.]/g,""))||0;
-  const est=L.reduce((n,l)=>n+num(l.estUSD),0), billed=L.reduce((n,l)=>n+num(l.billedUSD),0);
+  const est=L.reduce((n,l)=>n+num(l.estUSD),0), billed=ALL.reduce((n,l)=>n+num(l.billedUSD),0);
   const cnt=(f)=>L.filter(f).length;
   const fmt$=(n)=>"$"+n.toLocaleString("en-US",{maximumFractionDigits:0});
   const byAE={};
-  L.forEach(l=>(l.owners.length?l.owners:["(unassigned)"]).forEach(a=>{
-    const r=byAE[a]=byAE[a]||{leads:0,contacted:0,positive:0,meetings:0,won:0,billed:0};
+  const blank=()=>({leads:0,excluded:0,contacted:0,attempted:0,positive:0,meetings:0,won:0,billed:0});
+  ALL.forEach(l=>((l.owners||[]).length?l.owners:["(unassigned)"]).forEach(a=>{
+    const r=byAE[a]=byAE[a]||blank();
+    if(isExcluded(l)){r.excluded++;r.billed+=num(l.billedUSD);return;}
     r.leads++;if(l.outreach&&l.outreach!=="No Outreach")r.contacted++;
+    if(["No Response","Not Relevant","Positive"].includes(l.outreach))r.attempted++;
     if(l.outreach==="Positive")r.positive++;
     if(["Meeting Set","Quoted","Work Won"].includes(l.result))r.meetings++;
     if(l.result==="Work Won")r.won++;r.billed+=num(l.billedUSD);
   }));
+  const xFirm=X.filter(l=>l.excluded.scope==="Firm").length;
   document.getElementById("reportBody").innerHTML=`
   <div class="statgrid">
-    <div class="stat"><div class="v">${L.length}</div><div class="l">Leads</div></div>
+    <div class="stat"><div class="v">${L.length}</div><div class="l">Live leads</div></div>
+    <div class="stat"><div class="v">${X.length}</div><div class="l">Excluded leads</div></div>
     <div class="stat"><div class="v">${attempted.length}</div><div class="l">Outreach attempted</div></div>
-    <div class="stat"><div class="v">${attempted.length?Math.round(responded.length/attempted.length*100):0}%</div><div class="l">Response rate</div></div>
+    <div class="stat"><div class="v">${pct(responded.length,attempted.length)}</div><div class="l">Response rate</div></div>
+    <div class="stat"><div class="v">${pct(won.length,attempted.length)}</div><div class="l">Close rate</div></div>
     <div class="stat"><div class="v">${cnt(l=>l.outreach==="Positive")}</div><div class="l">Positive</div></div>
     <div class="stat"><div class="v">${cnt(l=>l.result==="Meeting Set")}</div><div class="l">Meetings set</div></div>
     <div class="stat"><div class="v">${cnt(l=>l.result==="Quoted")}</div><div class="l">Quoted</div></div>
@@ -866,10 +1191,11 @@ function renderReports(){
     <div class="stat"><div class="v">${fmt$(est)}</div><div class="l">Est. value</div></div>
     <div class="stat"><div class="v">${fmt$(billed)}</div><div class="l">Billed to date</div></div>
   </div>
+  <p class="small muted" style="margin:-4px 0 12px">Rates use live leads only. Close rate is work won as a share of outreach attempted. Excluded leads: ${X.length-xFirm} marked as dead ends by sales, ${xFirm} from blacklisted firms. Billed includes any billing on excluded leads.</p>
   <h3>By AE</h3>
-  <div class="tblwrap"><table><thead><tr><th>AE</th><th>Leads</th><th>Contacted</th><th>Positive</th><th>Meeting+</th><th>Work won</th><th>Billed</th></tr></thead>
-  <tbody>${Object.entries(byAE).sort((a,b)=>b[1].leads-a[1].leads).map(([a,r])=>`<tr><td>${esc(a)}</td><td>${r.leads}</td><td>${r.contacted}</td><td>${r.positive}</td><td>${r.meetings}</td><td>${r.won}</td><td>${fmt$(r.billed)}</td></tr>`).join("")||`<tr><td colspan="7" class="muted">No leads yet.</td></tr>`}</tbody></table></div>
-  <p class="small muted" style="margin-top:8px">Claimant vs defendant: ${cnt(l=>l.side==="Claimant")} claimant-side, ${cnt(l=>l.side==="Defendant")} defendant-side, ${cnt(l=>l.side==="Intelligence")} intelligence.</p>`;
+  <div class="tblwrap"><table><thead><tr><th>AE</th><th>Live leads</th><th>Excluded</th><th>Contacted</th><th>Positive</th><th>Meeting+</th><th>Work won</th><th>Close rate</th><th>Billed</th></tr></thead>
+  <tbody>${Object.entries(byAE).sort((a,b)=>b[1].leads-a[1].leads).map(([a,r])=>`<tr><td>${esc(a)}</td><td>${r.leads}</td><td class="muted">${r.excluded||"–"}</td><td>${r.contacted}</td><td>${r.positive}</td><td>${r.meetings}</td><td>${r.won}</td><td>${pct(r.won,r.attempted)}</td><td>${fmt$(r.billed)}</td></tr>`).join("")||`<tr><td colspan="9" class="muted">No leads yet.</td></tr>`}</tbody></table></div>
+  <p class="small muted" style="margin-top:8px">Live leads by side: ${cnt(l=>l.side==="Claimant")} claimant-side, ${cnt(l=>l.side==="Defendant")} defendant-side, ${cnt(l=>l.side==="Intelligence")} intelligence. Cases covered: ${new Set(ALL.map(l=>l.claimId)).size}.</p>`;
 }
 
 /* ============ data tab, save/load ============ */
@@ -916,11 +1242,11 @@ async function wipeAll(){
 
 /* ============ AE board export ============ */
 function boardData(){
-  return S.leads.map(l=>{const c=claimOf(l);return{
+  return liveLeads().map(l=>{const c=claimOf(l);return{
     leadId:l.leadId,side:l.side,cycle:l.cycle,firm:l.firmDisplay,actsFor:l.actsFor||"",party:l.party,solicitors:l.solicitors,
     inHouse:l.inHouse,owners:l.owners,ownership:l.ownership,claimedBy:l.claimedBy||"",outreach:l.outreach,status:l.status,result:l.result,
     followUp:l.followUp,salesforce:l.salesforce,email:l.email||null,
-    title:c.caseTitle||"",citation:c.citation||"",value:c.value||"",date:c.date||"",topics:c.topics||"",summary:c.summary||""};});
+    title:c.caseTitle||"",citation:c.citation||"",value:valueText(c)+((c.valueBasis||detectBasis(c.value))==="minimum"?" (stated minimum)":""),date:c.date||"",topics:c.topics||"",summary:c.summary||""};});
 }
 function buildBoardHtml(netlify){
   const data=boardData();
@@ -1126,20 +1452,29 @@ function importPackage(file){
       else{firmIdMap[f.id]=ex.id;(firmAssignment.cleanAEs(f.aes||[])).forEach(a=>{if(!ex.aes.some(x=>x.toLowerCase()===a.toLowerCase()))ex.aes.push(a);});
            (f.aliases||[]).forEach(al=>{if(!(ex.aliases||[]).some(x=>x.toLowerCase()===al.toLowerCase()))ex.aliases.push(al);});}
     });
-    // claims by claim number
-    const idMap={};
+    // claims by claim number (normalised: case, spaces and leading zeros don't matter)
+    const idMap={};const repeats=[];
     pkg.claims.forEach(c=>{
-      const ex=S.claims.find(x=>String(x.claimNumber).toUpperCase()===String(c.claimNumber).toUpperCase());
+      const ex=c.type!=="Intelligence"&&normClaim(c.claimNumber)?S.claims.find(x=>x.type!=="Intelligence"&&normClaim(x.claimNumber)===normClaim(c.claimNumber)):S.claims.find(x=>x.claimNumber===c.claimNumber);
       if(ex){
         ["caseTitle","citation","date","value","topics","summary","clmParty","defParty","clmInHouse","defInHouse"].forEach(k=>{if(val(c[k]))ex[k]=c[k];});
+        if(val(c.value)||c.valueBasis)ex.valueBasis=c.valueBasis||detectBasis(c.value);
         ex.status="Updated";idMap[c.id]=ex.id;rep.claimsUpdated++;
+        if(String(ex.claimNumber)!==String(c.claimNumber))repeats.push(`${c.claimNumber} matched existing ${ex.claimNumber} and was merged into it`);
       }else{
-        const nc=Object.assign({},c,{id:uid()});S.claims.push(nc);idMap[c.id]=nc.id;rep.claimsAdded++;
+        const twin=S.claims.find(x=>sameParties(x,c));
+        if(twin)repeats.push(`${c.claimNumber} (${c.caseTitle||"untitled"}) has the same parties as ${twin.claimNumber}${twin.cycle?` from ${twin.cycle}`:""}`);
+        const nc=Object.assign({},c,{id:uid()});
+        if(nc.valueBasis===undefined)nc.valueBasis=detectBasis(nc.value);
+        S.claims.push(nc);idMap[c.id]=nc.id;rep.claimsAdded++;
       }
     });
     // leads by leadId — never overwrite logged outreach
     pkg.leads.forEach(l=>{
-      const ex=S.leads.find(x=>x.leadId===l.leadId);
+      const cid=idMap[l.claimId]||l.claimId;
+      // same lead ID, or (when the claim merged into an existing one) the same firm on the same side
+      const ex=S.leads.find(x=>x.leadId===l.leadId)||
+        S.leads.find(x=>x.claimId===cid&&x.sideTag===l.sideTag&&normFirm(x.firmDisplay)&&normFirm(x.firmDisplay)===normFirm(l.firmDisplay));
       if(ex){
         if(l.email&&!ex.email){ex.email=l.email;rep.emailsAdded++;}
         rep.leadsSkipped++;
@@ -1158,8 +1493,10 @@ function importPackage(file){
       `Claims: ${rep.claimsAdded} added, ${rep.claimsUpdated} updated.<br>`+
       `Leads: ${rep.leadsAdded} added, ${rep.leadsSkipped} already present (outreach and existing owners preserved).<br>`+
       `Assignments repaired: ${repairs.assigned}. Firm links repaired: ${repairs.linked}. Ownership statuses corrected: ${repairs.statusFixed}.<br>`+
-      `Email drafts attached: ${rep.emailsAdded}. Firms added: ${rep.firmsAdded}. Ambiguous firm mappings skipped: ${rep.firmsAmbiguous}.`;
-    toast(`Imported: ${rep.claimsAdded} claims, ${rep.leadsAdded} leads.`);
+      `Email drafts attached: ${rep.emailsAdded}. Firms added: ${rep.firmsAdded}. Ambiguous firm mappings skipped: ${rep.firmsAmbiguous}.`+
+      `${repairs.excluded?`<br>Leads greyed because the firm is blacklisted: ${repairs.excluded}.`:""}`+
+      `${repeats.length?`<div class="conflict" style="margin-top:8px"><strong>Possible repeats (${repeats.length})</strong>${repeats.map(x=>`<div>${esc(x)}</div>`).join("")}<div class="muted" style="margin-top:4px">Check these on the Cases tab, filtered to Possible repeats.</div></div>`:""}`;
+    toast(`Imported: ${rep.claimsAdded} claims, ${rep.leadsAdded} leads.${repeats.length?` ${repeats.length} possible repeat(s) flagged.`:""}`,repeats.length>0);
     document.getElementById("pkgInput").value="";
   };
   r.readAsText(file);
@@ -1240,7 +1577,9 @@ async function exportRoundup(){
     };
     const C=sideAgg("CLM"),D=sideAgg("DEF");
     const orNP=(v,f)=>val(v)||`No ${f} provided`;
-    const row=ws.addRow([c.cycle,C.ae,"",D.ae,"",orNP(c.date,"Date"),c.caseTitle,c.topics,c.citation,orNP(c.value,"Value"),c.summary,
+    const vb=c.valueBasis||detectBasis(c.value);
+    const vtxt=valueText(c)?valueText(c)+(vb==="minimum"?" (stated minimum)":vb==="maximum"?" (stated maximum)":""):"";
+    const row=ws.addRow([c.cycle,C.ae,"",D.ae,"",orNP(c.date,"Date"),c.caseTitle,c.topics,c.citation,orNP(vtxt,"Value"),c.summary,
       orNP(c.clmParty,"Claimant"),orNP(C.firm,"Law Firm"),orNP(C.law,"Lawyer"),orNP(C.role,"Role"),orNP(C.ih,"In-House"),
       orNP(c.defParty,"Defendant"),orNP(D.firm,"Law Firm"),orNP(D.law,"Lawyer"),orNP(D.role,"Role"),orNP(D.ih,"In-House")]);
     row.eachCell(cell=>{cell.alignment={vertical:"top",wrapText:true};cell.font={size:10};

@@ -29,6 +29,33 @@ export function matchingFirms(firms, name) {
     (firm.aliases || []).some(alias => normalizeFirm(alias) === normalized));
 }
 
+// Firm-wide blacklist → greyed leads. A lead linked to a blacklisted firm is excluded
+// (scope "Firm") unless it already has a result recorded, or a salesperson chose to
+// include it anyway (excludeOverride). Lifting the blacklist un-greys those leads.
+// Per-matter exclusions (scope "Matter") are never touched here.
+export function reconcileExclusions(state) {
+  const firms = state.firms || [];
+  const report = { excluded: 0, restored: 0, changed: false };
+  for (const lead of state.leads || []) {
+    const firm = lead.firmId ? firms.find(f => f.id === lead.firmId) : null;
+    const bl = firm && firm.blacklist && String(firm.blacklist.reason || "").trim() ? firm.blacklist : null;
+    if (!bl) {
+      if (lead.excludeOverride) { delete lead.excludeOverride; report.changed = true; }
+      if (lead.excluded && lead.excluded.scope === "Firm") { lead.excluded = null; report.restored++; }
+      continue;
+    }
+    if (lead.excluded && lead.excluded.scope === "Firm") {
+      if (lead.excluded.reason !== bl.reason) { lead.excluded.reason = bl.reason; report.changed = true; }
+      continue;
+    }
+    if (lead.excluded || lead.excludeOverride || lead.result) continue;
+    lead.excluded = { scope: "Firm", reason: bl.reason, by: bl.by || "", at: new Date().toISOString().slice(0, 10) };
+    report.excluded++;
+  }
+  report.changed = report.changed || report.excluded > 0 || report.restored > 0;
+  return report;
+}
+
 export function reconcileLeadAssignments(state) {
   const firms = state.firms || [];
   const report = { linked: 0, assigned: 0, statusFixed: 0, changed: false };
@@ -58,6 +85,9 @@ export function reconcileLeadAssignments(state) {
     lead.assignmentSource = "firm";
     report.assigned++;
   }
-  report.changed = report.linked > 0 || report.assigned > 0 || report.statusFixed > 0;
+  const ex = reconcileExclusions(state);
+  report.excluded = ex.excluded;
+  report.restored = ex.restored;
+  report.changed = report.linked > 0 || report.assigned > 0 || report.statusFixed > 0 || ex.changed;
   return report;
 }

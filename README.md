@@ -67,6 +67,18 @@ export the cycle package → import it here.
   leads view filter. Click "Add calendar reminder" to put it in your own Outlook calendar
   as well — that is the only part that will chase you without you opening the site.
 
+- **Blacklisted firms**: on the Firms tab, set a firm's Blacklist to Blacklisted and give a
+  reason (editable later). Its leads are greyed out and kept out of response and close rates.
+  Leads that already have a result recorded are left alone. Lifting the blacklist restores them.
+- **Excluding a lead**: any salesperson can open a lead and choose "Exclude as a dead end",
+  with a reason. A lead greyed by a firm blacklist can be included again if someone thinks it
+  can still close. Excluded leads are counted separately in Reports.
+- **Cases**: one row per case with all its claimant and defendant leads, who has done outreach,
+  the furthest result reached, and a flag on cases that look like repeats (same claim number
+  in a different format, or the same claimant and defendant). Imports report possible repeats.
+- **Claim value**: "£200K+" means the claim form gives a stated minimum. It is a floor, not
+  the claim's worth, and is labelled that way everywhere it appears.
+
 ## Backups
 
 Data → "Download backup (JSON)". Take one before each cycle and keep it on SharePoint.
