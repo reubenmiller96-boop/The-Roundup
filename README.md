@@ -79,6 +79,9 @@ export the cycle package → import it here.
 - **AE tracking**: Reports shows, per AE, leads given, greyed out (and what share), and leads
   with no solicitor named, plus a table of greyed-out leads by AE and reason. Counts go
   against the lead's owner. The Leads tab can filter to "No solicitor named".
+- **Exporting firms**: Firms tab → "Export firm list (.xlsx)" gives every firm with AEs,
+  aliases, type, blacklist status and reason, and lead counts. The file can be imported back
+  through the same Import button; AEs, aliases and type merge in, blacklist status does not.
 - **Cases**: one row per case with all its claimant and defendant leads, who has done outreach,
   the furthest result reached, and a flag on cases that look like repeats (same claim number
   in a different format, or the same claimant and defendant). Imports report possible repeats.

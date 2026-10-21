@@ -179,7 +179,7 @@ details.adv summary{cursor:pointer;color:var(--slate);font-size:12.5px}
 </div>
 <div id="app" style="display:none;width:100%">
 <aside id="side">
-  <div class="brand"><h1>Lex<span>Extract</span></h1><small>Web · build 7</small></div>
+  <div class="brand"><h1>Lex<span>Extract</span></h1><small>Web · build 8</small></div>
   <nav id="nav"></nav>
   <div class="foot"><span class="dot" id="saveDot"></span><span id="saveLbl">Saved</span><br><span id="whoLbl"></span></div>
 </aside>
@@ -249,6 +249,7 @@ details.adv summary{cursor:pointer;color:var(--slate);font-size:12.5px}
   <div class="card">
     <div class="row">
       <button class="btn" onclick="document.getElementById('firmsXlsx').click()">Import from roundup workbook (.xlsx)</button>
+      <button class="btn ghost" onclick="exportFirms()">Export firm list (.xlsx)</button>
       <input type="file" id="firmsXlsx" accept=".xlsx" style="display:none" onchange="importFirmsXlsx(this.files[0])">
       <button class="btn ghost" onclick="addFirm()">Add firm</button>
       <input id="firmSearch" placeholder="Search firms…" class="grow" oninput="renderFirms()">
@@ -581,19 +582,35 @@ function importFirmsXlsx(file){
       const take=(name,ae)=>{
         name=String(name||"").trim(); if(!name||/^firm name$/i.test(name)||/^law firm$/i.test(name))return;
         const aes=splitAEs(ae);
-        if(firmAssignment.matchingFirms(S.firms,name).length>1)return;
+        if(firmAssignment.matchingFirms(S.firms,name).length>1)return null;
         const ex=matchFirm(name);
         if(ex){ // merge AEs, keep alias if display differs
           aes.forEach(a=>{if(!ex.aes.some(x=>x.toLowerCase()===a.toLowerCase()))ex.aes.push(a);});
           if(ex.canonical.toLowerCase()!==name.toLowerCase() && !(ex.aliases||[]).some(a=>a.toLowerCase()===name.toLowerCase()))ex.aliases.push(name);
           merged++;
+          return ex;
         }else{
-          S.firms.push({id:uid(),canonical:name,aliases:[],aes,type:/chambers/i.test(name)?"Chambers":"Solicitors",notes:""});
+          const nf={id:uid(),canonical:name,aliases:[],aes,type:/chambers/i.test(name)?"Chambers":"Solicitors",notes:"",blacklist:null};
+          S.firms.push(nf);
           added++;
+          return nf;
         }
       };
-      // table 1: cols A,B  |  table 2: cols D,E (embedded second table)
-      rows.forEach(row=>{take(row[0],row[1]);take(row[3],row[4]);});
+      const h=(rows[0]||[]).map(x=>String(x).trim().toLowerCase());
+      if(h[0]==="firm"&&h[1]==="aes"&&h[2]==="aliases"){
+        // a firm list exported from this site: one table, aliases and type in C and D.
+        // Blacklist status is deliberately not imported; set it on the Firms tab.
+        rows.slice(1).forEach(row=>{
+          const f=take(row[0],row[1]);if(!f)return;
+          String(row[2]||"").split(";").map(x=>x.trim()).filter(Boolean).forEach(al=>{
+            if(al.toLowerCase()!==f.canonical.toLowerCase()&&!(f.aliases||[]).some(x=>x.toLowerCase()===al.toLowerCase()))f.aliases.push(al);});
+          const t=String(row[3]||"").trim();
+          if(["Solicitors","Chambers","Corporation","Other"].includes(t))f.type=t;
+        });
+      }else{
+        // roundup workbook — table 1: cols A,B  |  table 2: cols D,E (embedded second table)
+        rows.forEach(row=>{take(row[0],row[1]);take(row[3],row[4]);});
+      }
       S.firms.sort((a,b)=>a.canonical.localeCompare(b.canonical));
       reconcileAssignments();
       logAct(`Firms import: ${added} added, ${merged} merged from ${file.name}`);
@@ -602,6 +619,31 @@ function importFirmsXlsx(file){
     }catch(err){toast("Could not read that workbook: "+err.message,true);}
   };
   r.readAsArrayBuffer(file);
+}
+async function exportFirms(){
+  if(!S.firms.length){toast("No firms to export yet.",true);return;}
+  const wb=new ExcelJS.Workbook();const ws=wb.addWorksheet("Firms");
+  // Firm, AEs, Aliases first so the file can be imported straight back in
+  const cols=["Firm","AEs","Aliases","Type","Blacklisted","Blacklist reason","Blacklisted by","Blacklisted on","Leads","Live leads","Greyed out","Notes"];
+  const widths=[34,20,34,13,12,40,16,14,8,10,11,30];
+  ws.addRow(cols);
+  ws.getRow(1).eachCell(c=>{c.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF132A47"}};c.font={bold:true,color:{argb:"FFC9A227"},size:10};c.alignment={vertical:"middle",wrapText:true};});
+  const firms=[...S.firms].sort((a,b)=>a.canonical.localeCompare(b.canonical));
+  firms.forEach((f,i)=>{
+    const ls=S.leads.filter(l=>l.firmId===f.id);
+    const bl=f.blacklist;
+    const row=ws.addRow([f.canonical,(f.aes||[]).join(", "),(f.aliases||[]).join("; "),f.type||"",bl?"Yes":"",bl?bl.reason:"",bl?(bl.by||""):"",bl?(bl.at||""):"",
+      ls.length,ls.filter(l=>!isExcluded(l)).length,ls.filter(isExcluded).length,f.notes||""]);
+    row.eachCell(cell=>{cell.alignment={vertical:"top",wrapText:true};cell.font={size:10,color:bl?{argb:"FF5E6B7C"}:undefined};
+      if(i%2)cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFF0EEE8"}};});
+  });
+  cols.forEach((_,i)=>ws.getColumn(i+1).width=widths[i]);
+  ws.views=[{state:"frozen",ySplit:1}];
+  ws.autoFilter={from:"A1",to:{row:1,column:cols.length}};
+  const buf=await wb.xlsx.writeBuffer();
+  download(`Roundup_firm_list_${today()}.xlsx`,new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+  logAct(`${WHO||"Someone"} exported the firm list (${firms.length} firms)`);
+  toast(`Firm list exported: ${firms.length} firms.`);
 }
 function addFirm(){S.firms.unshift({id:uid(),canonical:"New firm",aliases:[],aes:[],type:"Solicitors",notes:""});markDirty();renderFirms();}
 function renderFirms(){
