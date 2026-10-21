@@ -179,7 +179,7 @@ details.adv summary{cursor:pointer;color:var(--slate);font-size:12.5px}
 </div>
 <div id="app" style="display:none;width:100%">
 <aside id="side">
-  <div class="brand"><h1>Lex<span>Extract</span></h1><small>Web · build 6</small></div>
+  <div class="brand"><h1>Lex<span>Extract</span></h1><small>Web · build 7</small></div>
   <nav id="nav"></nav>
   <div class="foot"><span class="dot" id="saveDot"></span><span id="saveLbl">Saved</span><br><span id="whoLbl"></span></div>
 </aside>
@@ -206,6 +206,7 @@ details.adv summary{cursor:pointer;color:var(--slate);font-size:12.5px}
         <option value="active">Active (hides scheduled revisits)</option>
         <option value="due">Due now</option>
         <option value="revisit">Scheduled revisits</option>
+        <option value="nosol">No solicitor named</option>
         <option value="live">Hide greyed out</option>
         <option value="excluded">Greyed out only</option>
         <option value="all">Everything</option>
@@ -494,6 +495,8 @@ function valueHtml(c,withNote){
 
 /* ============ exclusions ============ */
 function isExcluded(l){return !!(l&&l.excluded);}
+// a lead "has a solicitor" when at least one named external solicitor is attached
+function hasSolicitor(l){return (l.sols||[]).some(s=>val(s&&s.name))||(!(l.sols||[]).length&&!!val(l.solicitors));}
 function liveLeads(L){return (L||S.leads).filter(l=>!isExcluded(l));}
 function exclLabel(l){
   if(!l.excluded)return "";
@@ -766,6 +769,7 @@ function renderLeads(){
     if(fView==="due"&&!isDue(l))return false;
     if(fView==="revisit"&&l.status!=="Revisit")return false;
     if(fView==="live"&&isExcluded(l))return false;
+    if(fView==="nosol"&&hasSolicitor(l))return false;
     if(fView==="excluded"&&!isExcluded(l))return false;
     if(q){const hay=`${l.leadId} ${c.caseTitle} ${c.citation} ${c.claimNumber||""} ${l.firmDisplay} ${l.party} ${l.solicitors} ${(l.owners||[]).join(" ")}`.toLowerCase();if(!hay.includes(q))return false;}
     return true;
@@ -793,7 +797,7 @@ function renderLeads(){
           ?(l.excluded.scope==="Firm"?"":`<button class="btn ghost sm" onclick="includeLead('${l.id}')">Undo</button>`)
           :`<select class="small" style="padding:2px 4px;font-size:11.5px;color:var(--slate)" onchange="quickGrey('${l.id}',this)">${reasonOptions("Grey out…")}</select>`}</div></td>
       <td><strong>${esc(c.caseTitle||"")}</strong><br><span class="small muted">${esc(l.party)}</span>${xl&&l.excluded.reason?`<br><span class="small" style="font-style:italic">${esc(l.excluded.reason)}</span>`:""}</td>
-      <td>${esc(l.firmDisplay)}<br><span class="small muted">${esc(l.solicitors)}</span>${activityChip(l)}</td>
+      <td>${esc(l.firmDisplay)}<br>${hasSolicitor(l)?`<span class="small muted">${esc(l.solicitors)}</span>`:`<span class="pill amber" title="No named solicitor on this lead${l.inHouse?"; in-house contact: "+esc(l.inHouse):""}">No solicitor named${l.inHouse?" · in-house only":""}</span>`}${activityChip(l)}</td>
       <td>${xl&&!(l.owners||[]).length?`<span class="muted small">—</span>`:l.ownership==="Claim Requested"?`<span class="pill amber">Requested: ${esc((l.claimedBy||"").replace(/<[^>]*>/,"").trim())}</span>`:l.ownership==="Available to Claim"?`<span class="pill orange">Available to claim</span>`:esc((l.owners||[]).join(", "))}</td>
       <td>${pill(l.outreach,oMap)}</td><td>${pill(l.status,sMap)}</td><td>${pill(l.result,rMap)}</td>
       <td>${l.followUp?`<span class="mono small" style="${overdue?'color:var(--bad);font-weight:600':'color:var(--slate)'}">${esc(l.followUp)}</span><br><span class="small ${overdue?'':'muted'}" style="${overdue?'color:var(--bad)':''}">${esc(dueLabel(l))}</span>`:`<span class="muted small">—</span>`}</td>
@@ -1256,10 +1260,16 @@ function renderReports(){
   const cnt=(f)=>L.filter(f).length;
   const fmt$=(n)=>"$"+n.toLocaleString("en-US",{maximumFractionDigits:0});
   const byAE={};
-  const blank=()=>({leads:0,excluded:0,contacted:0,attempted:0,positive:0,meetings:0,won:0,billed:0});
+  const greyCols=[...GREY_REASONS.map(([k,lbl])=>[k,lbl]),["__firm","Blacklisted firm"]];
+  const greyKey=l=>l.excluded.scope==="Firm"?"__firm":(GREY_REASONS.some(([k])=>k===l.excluded.code)?l.excluded.code:"other");
+  const blank=()=>({leads:0,excluded:0,contacted:0,attempted:0,positive:0,meetings:0,won:0,billed:0,total:0,noSol:0,noSolLive:0,noSolGrey:0,grey:{}});
   ALL.forEach(l=>((l.owners||[]).length?l.owners:["(unassigned)"]).forEach(a=>{
     const r=byAE[a]=byAE[a]||blank();
-    if(isExcluded(l)){r.excluded++;r.billed+=num(l.billedUSD);return;}
+    r.total++;
+    const ns=!hasSolicitor(l);
+    if(ns)r.noSol++;
+    if(isExcluded(l)){r.excluded++;r.billed+=num(l.billedUSD);const k=greyKey(l);r.grey[k]=(r.grey[k]||0)+1;if(ns)r.noSolGrey++;return;}
+    if(ns)r.noSolLive++;
     r.leads++;if(l.outreach&&l.outreach!=="No Outreach")r.contacted++;
     if(["No Response","Not Relevant","Positive"].includes(l.outreach))r.attempted++;
     if(l.outreach==="Positive")r.positive++;
@@ -1270,6 +1280,7 @@ function renderReports(){
   <div class="statgrid">
     <div class="stat"><div class="v">${L.length}</div><div class="l">Live leads</div></div>
     <div class="stat"><div class="v">${X.length}</div><div class="l">Greyed out</div></div>
+    <div class="stat"><div class="v">${ALL.filter(l=>!hasSolicitor(l)).length}</div><div class="l">No solicitor named</div></div>
     <div class="stat"><div class="v">${attempted.length}</div><div class="l">Outreach attempted</div></div>
     <div class="stat"><div class="v">${pct(responded.length,attempted.length)}</div><div class="l">Response rate</div></div>
     <div class="stat"><div class="v">${pct(won.length,attempted.length)}</div><div class="l">Close rate</div></div>
@@ -1285,8 +1296,13 @@ function renderReports(){
     const by={};X.forEach(l=>{const k=l.excluded.scope==="Firm"?"Blacklisted firm":((GREY_REASONS.find(([c])=>c===l.excluded.code)||[,"Other"])[1]);by[k]=(by[k]||0)+1;});
     return Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([k,n])=>`${esc(k)} ${n}`).join(" · ");})()}</p>`:""}
   <h3>By AE</h3>
-  <div class="tblwrap"><table><thead><tr><th>AE</th><th>Live leads</th><th>Greyed out</th><th>Contacted</th><th>Positive</th><th>Meeting+</th><th>Work won</th><th>Close rate</th><th>Billed</th></tr></thead>
-  <tbody>${Object.entries(byAE).sort((a,b)=>b[1].leads-a[1].leads).map(([a,r])=>`<tr><td>${esc(a)}</td><td>${r.leads}</td><td class="muted">${r.excluded||"–"}</td><td>${r.contacted}</td><td>${r.positive}</td><td>${r.meetings}</td><td>${r.won}</td><td>${pct(r.won,r.attempted)}</td><td>${fmt$(r.billed)}</td></tr>`).join("")||`<tr><td colspan="9" class="muted">No leads yet.</td></tr>`}</tbody></table></div>
+  <div class="tblwrap"><table><thead><tr><th>AE</th><th>Leads given</th><th>Live leads</th><th>Greyed out</th><th title="Leads with no named solicitor, so there is no one obvious to contact">No solicitor named</th><th>Contacted</th><th>Positive</th><th>Meeting+</th><th>Work won</th><th>Close rate</th><th>Billed</th></tr></thead>
+  <tbody>${Object.entries(byAE).sort((a,b)=>b[1].total-a[1].total).map(([a,r])=>`<tr><td>${esc(a)}</td><td>${r.total}</td><td>${r.leads}</td><td>${r.excluded?`${r.excluded} <span class="muted">(${pct(r.excluded,r.total)})</span>`:`<span class="muted">–</span>`}</td><td>${r.noSol?`${r.noSol} <span class="muted">(${pct(r.noSol,r.total)})</span>`:`<span class="muted">–</span>`}</td><td>${r.contacted}</td><td>${r.positive}</td><td>${r.meetings}</td><td>${r.won}</td><td>${pct(r.won,r.attempted)}</td><td>${fmt$(r.billed)}</td></tr>`).join("")||`<tr><td colspan="11" class="muted">No leads yet.</td></tr>`}</tbody></table></div>
+  <p class="small muted" style="margin-top:6px">Leads given is everything assigned to the AE, live or greyed out. A lead with no solicitor named has no one obvious to contact, so outreach on it is harder. Percentages are of leads given.</p>
+  <h3>Greyed out by AE and reason</h3>
+  ${Object.values(byAE).some(r=>r.excluded)?`<div class="tblwrap"><table><thead><tr><th>AE</th><th>Total</th>${greyCols.map(([,lbl])=>`<th>${esc(lbl)}</th>`).join("")}<th title="Greyed-out leads that also had no solicitor named">Of which no solicitor named</th></tr></thead>
+  <tbody>${Object.entries(byAE).filter(([,r])=>r.excluded).sort((a,b)=>b[1].excluded-a[1].excluded).map(([a,r])=>`<tr><td>${esc(a)}</td><td><strong>${r.excluded}</strong></td>${greyCols.map(([k])=>`<td>${r.grey[k]||`<span class="muted">–</span>`}</td>`).join("")}<td>${r.noSolGrey||`<span class="muted">–</span>`}</td></tr>`).join("")}</tbody></table></div>
+  <p class="small muted" style="margin-top:6px">Counted against the lead's owner, not the person who greyed it out.</p>`:`<p class="small muted">No leads greyed out${cyc?" in this cycle":""}.</p>`}
   <p class="small muted" style="margin-top:8px">Live leads by side: ${cnt(l=>l.side==="Claimant")} claimant-side, ${cnt(l=>l.side==="Defendant")} defendant-side, ${cnt(l=>l.side==="Intelligence")} intelligence. Cases covered: ${new Set(ALL.map(l=>l.claimId)).size}.</p>`;
 }
 

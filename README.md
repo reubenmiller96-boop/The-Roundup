@@ -76,6 +76,9 @@ export the cycle package → import it here.
   and add detail if useful; Other needs detail. Tick several rows to grey them out in one go.
   Undo puts a lead back. A lead greyed by a firm blacklist can be included again if someone
   thinks it can still close. Reports count greyed-out leads separately, broken down by reason.
+- **AE tracking**: Reports shows, per AE, leads given, greyed out (and what share), and leads
+  with no solicitor named, plus a table of greyed-out leads by AE and reason. Counts go
+  against the lead's owner. The Leads tab can filter to "No solicitor named".
 - **Cases**: one row per case with all its claimant and defendant leads, who has done outreach,
   the furthest result reached, and a flag on cases that look like repeats (same claim number
   in a different format, or the same claimant and defendant). Imports report possible repeats.
