@@ -179,7 +179,7 @@ details.adv summary{cursor:pointer;color:var(--slate);font-size:12.5px}
 </div>
 <div id="app" style="display:none;width:100%">
 <aside id="side">
-  <div class="brand"><h1>Lex<span>Extract</span></h1><small>Web · build 5</small></div>
+  <div class="brand"><h1>Lex<span>Extract</span></h1><small>Web · build 6</small></div>
   <nav id="nav"></nav>
   <div class="foot"><span class="dot" id="saveDot"></span><span id="saveLbl">Saved</span><br><span id="whoLbl"></span></div>
 </aside>
@@ -206,13 +206,15 @@ details.adv summary{cursor:pointer;color:var(--slate);font-size:12.5px}
         <option value="active">Active (hides scheduled revisits)</option>
         <option value="due">Due now</option>
         <option value="revisit">Scheduled revisits</option>
-        <option value="live">Hide excluded</option>
-        <option value="excluded">Excluded only</option>
+        <option value="live">Hide greyed out</option>
+        <option value="excluded">Greyed out only</option>
         <option value="all">Everything</option>
       </select>
     </div>
   </div>
+  <div id="bulkBar" class="card" style="display:none;padding:10px 14px;position:sticky;top:0;z-index:5;border-color:var(--navy)"></div>
   <div id="leadsWrap"><table id="leadsTable"><thead><tr>
+    <th style="width:28px"><input type="checkbox" id="selAll" title="Select every live lead shown" onclick="event.stopPropagation()" onchange="selectAllShown(this.checked)"></th>
     <th>Lead</th><th>Case</th><th>Firm</th><th>Owners</th><th>Outreach</th><th>Status</th><th>Result</th><th>Follow-up</th>
   </tr></thead><tbody id="leadsBody"></tbody></table></div>
 </section>
@@ -230,7 +232,7 @@ details.adv summary{cursor:pointer;color:var(--slate);font-size:12.5px}
         <option value="untouched">No outreach yet</option>
         <option value="progress">Outreach under way</option>
         <option value="positive">Positive or better</option>
-        <option value="dead">All leads excluded</option>
+        <option value="dead">All leads greyed out</option>
         <option value="repeat">Possible repeats</option>
       </select>
     </div>
@@ -495,7 +497,7 @@ function isExcluded(l){return !!(l&&l.excluded);}
 function liveLeads(L){return (L||S.leads).filter(l=>!isExcluded(l));}
 function exclLabel(l){
   if(!l.excluded)return "";
-  return l.excluded.scope==="Firm"?"Blacklisted firm":"Excluded";
+  return l.excluded.scope==="Firm"?"Blacklisted firm":"Greyed out";
 }
 
 /* ============ claim numbers and repeat detection ============ */
@@ -770,6 +772,12 @@ function renderLeads(){
   });
   // excluded leads sink to the bottom, otherwise keep the existing order
   rows.sort((a,b)=>(isExcluded(a)?1:0)-(isExcluded(b)?1:0));
+  SHOWN=rows.map(l=>l.id);
+  // drop selections that are no longer live or no longer exist
+  [...SEL].forEach(id=>{const l=S.leads.find(x=>x.id===id);if(!l||isExcluded(l))SEL.delete(id);});
+  renderBulkBar();
+  const sa=document.getElementById("selAll");
+  if(sa){const live=rows.filter(l=>!isExcluded(l));sa.checked=live.length>0&&live.every(l=>SEL.has(l.id));sa.indeterminate=!sa.checked&&live.some(l=>SEL.has(l.id));}
   const pill=(v,map)=>v?`<span class="pill ${map[v]||"grey"}">${esc(v)}</span>`:`<span class="muted small">—</span>`;
   const oMap={"Positive":"green","No Response":"amber","Not Relevant":"grey","No Outreach":"grey"};
   const sMap={"Ongoing":"green","Potential":"navy","Revisit":"amber","Dead":"grey","Closed":"grey"};
@@ -779,14 +787,18 @@ function renderLeads(){
     const overdue=isDue(l);
     const xl=isExcluded(l);
     return `<tr class="leadrow ${openLead===l.id?"exp":""} ${xl?"xl":""}" onclick="toggleLead('${l.id}')" style="cursor:pointer">
-      <td><span class="docket ${l.side==="Intelligence"?"int":""}">${esc(l.leadId)}</span>${xl?`<br><span class="pill grey" style="margin-top:4px" title="${esc(l.excluded.reason||"")}">${esc(exclLabel(l))}</span>`:""}</td>
+      <td onclick="event.stopPropagation()">${xl?"":`<input type="checkbox" ${SEL.has(l.id)?"checked":""} onchange="toggleSel('${l.id}',this.checked)" title="Select for bulk grey out">`}</td>
+      <td><span class="docket ${l.side==="Intelligence"?"int":""}">${esc(l.leadId)}</span>${xl?`<br><span class="pill grey" style="margin-top:4px" title="${esc(l.excluded.reason||"")}">${esc(exclLabel(l))}</span>`:""}
+        <div onclick="event.stopPropagation()" style="margin-top:4px">${xl
+          ?(l.excluded.scope==="Firm"?"":`<button class="btn ghost sm" onclick="includeLead('${l.id}')">Undo</button>`)
+          :`<select class="small" style="padding:2px 4px;font-size:11.5px;color:var(--slate)" onchange="quickGrey('${l.id}',this)">${reasonOptions("Grey out…")}</select>`}</div></td>
       <td><strong>${esc(c.caseTitle||"")}</strong><br><span class="small muted">${esc(l.party)}</span>${xl&&l.excluded.reason?`<br><span class="small" style="font-style:italic">${esc(l.excluded.reason)}</span>`:""}</td>
       <td>${esc(l.firmDisplay)}<br><span class="small muted">${esc(l.solicitors)}</span>${activityChip(l)}</td>
       <td>${xl&&!(l.owners||[]).length?`<span class="muted small">—</span>`:l.ownership==="Claim Requested"?`<span class="pill amber">Requested: ${esc((l.claimedBy||"").replace(/<[^>]*>/,"").trim())}</span>`:l.ownership==="Available to Claim"?`<span class="pill orange">Available to claim</span>`:esc((l.owners||[]).join(", "))}</td>
       <td>${pill(l.outreach,oMap)}</td><td>${pill(l.status,sMap)}</td><td>${pill(l.result,rMap)}</td>
       <td>${l.followUp?`<span class="mono small" style="${overdue?'color:var(--bad);font-weight:600':'color:var(--slate)'}">${esc(l.followUp)}</span><br><span class="small ${overdue?'':'muted'}" style="${overdue?'color:var(--bad)':''}">${esc(dueLabel(l))}</span>`:`<span class="muted small">—</span>`}</td>
     </tr>${openLead===l.id?leadDetail(l,c):""}`;
-  }).join("")||`<tr><td colspan="8" class="muted">No leads match. Publish drafts to create leads.</td></tr>`;
+  }).join("")||`<tr><td colspan="9" class="muted">No leads match. Publish drafts to create leads.</td></tr>`;
 }
 function toggleLead(id){
   const opening=openLead!==id;
@@ -816,7 +828,7 @@ function emailSection(l){
 }
 function leadDetail(l,c){
   const sel=(k,opts)=>`<select onclick="event.stopPropagation()" onchange="updLead('${l.id}','${k}',this.value)"><option value="">—</option>${opts.map(o=>`<option ${l[k]===o?"selected":""}>${o}</option>`).join("")}</select>`;
-  return `<tr class="leaddetail" onclick="event.stopPropagation()"><td colspan="8"><div class="leadpanel" id="panel-${l.id}">
+  return `<tr class="leaddetail" onclick="event.stopPropagation()"><td colspan="9"><div class="leadpanel" id="panel-${l.id}">
     <div class="phead"><span class="docket ${l.side==="Intelligence"?"int":""}">${esc(l.leadId)}</span>
       <span class="pt">${esc(c.caseTitle||"")}</span>
       <span class="small muted" style="margin-left:auto">${esc(l.firmDisplay)}</span>
@@ -877,11 +889,15 @@ function exclusionBox(l){
   if(!x){
     const firm=l.firmId?S.firms.find(f=>f.id===l.firmId):null;
     const overrideNote=l.excludeOverride&&firm&&firm.blacklist?`<p class="small muted" style="margin-bottom:6px">${esc(firm.canonical)} is blacklisted (${esc(firm.blacklist.reason)}), but this lead was included anyway${l.excludeOverride.by?` by ${esc(l.excludeOverride.by)}`:""}.</p>`:"";
-    return `${overrideNote}<div class="row" style="margin-bottom:10px"><button class="btn ghost sm" onclick="excludeLead('${l.id}')">Exclude as a dead end</button><span class="small muted">Greys the lead out and keeps it out of your response and close rates. Needs a reason.</span></div>`;
+    return `${overrideNote}<div class="row" style="margin-bottom:10px">
+      <select id="gr-${l.id}">${reasonOptions("Choose a reason…")}</select>
+      <input id="grd-${l.id}" placeholder="Detail (optional, required for Other)" style="min-width:240px" class="grow">
+      <button class="btn ghost sm" onclick="greyFromPanel('${l.id}')">Grey out</button>
+      <span class="small muted" style="flex-basis:100%">Greys the lead out and keeps it out of response and close rates. You can undo it.</span></div>`;
   }
   const firmWide=x.scope==="Firm";
   return `<div class="xlbox">
-    <div class="row" style="margin-bottom:6px"><span class="pill grey">${firmWide?"Blacklisted firm":"Excluded as a dead end"}</span>
+    <div class="row" style="margin-bottom:6px"><span class="pill grey">${firmWide?"Blacklisted firm":"Greyed out"}</span>
       <span class="small muted">${esc([x.by,x.at].filter(Boolean).join(", "))}${x.editedAt?` · reason edited by ${esc(x.editedBy||"")} ${esc(x.editedAt)}`:""}</span></div>
     ${firmWide?`<p class="small" style="margin-bottom:6px">Reason: ${esc(x.reason)}</p><p class="small muted" style="margin-bottom:6px">This comes from the firm's blacklist. Edit the reason on the Firms tab.</p>`
       :`<label class="small muted" style="display:block">Reason (edit any time)</label><input value="${esc(x.reason)}" onchange="updExcludeReason('${l.id}',this)" style="width:100%;margin-bottom:6px">`}
@@ -905,11 +921,85 @@ async function saveLeadFields(id,fields,note,okMsg){
     toast("Not saved: "+err.message,true);
   }
 }
-function excludeLead(id){
-  const l=S.leads.find(x=>x.id===id);
-  const reason=(prompt(`Why is ${l.leadId} a dead end? (e.g. firm uses an in-house team, we're conflicted, matter settled)`)||"").trim();
-  if(!reason){toast("A reason is required to exclude a lead.",true);return;}
-  saveLeadFields(id,{excluded:{scope:"Matter",reason,by:WHO||"",at:today()}},`Excluded as a dead end: ${reason}`,"Lead excluded. It no longer counts towards your rates.");
+/* ---- greying out individual leads ---- */
+const GREY_REASONS=[
+  ["lip","Litigant in person"],
+  ["no-outreach","No outreach done"],
+  ["settled","Settled or discontinued"],
+  ["no-vendors","Won't use external vendors"],
+  ["conflict","Conflicted"],
+  ["other","Other"]
+];
+let SEL=new Set(), SHOWN=[];
+function reasonOptions(placeholder){return `<option value="">${esc(placeholder)}</option>`+GREY_REASONS.map(([k,l])=>`<option value="${k}">${esc(l)}</option>`).join("");}
+function reasonText(code,detail){
+  const lbl=(GREY_REASONS.find(([k])=>k===code)||[,""])[1];
+  detail=String(detail||"").trim();
+  if(code==="other")return detail;
+  return detail?`${lbl}: ${detail}`:lbl;
+}
+function greyFields(code,detail){return {excluded:{scope:"Matter",code,reason:reasonText(code,detail),by:WHO||"",at:today()}};}
+function quickGrey(id,sel){
+  const code=sel.value;sel.value="";
+  if(!code)return;
+  let detail="";
+  if(code==="other"){
+    detail=(prompt("Why is this lead a dead end?")||"").trim();
+    if(!detail){toast("Other needs a short reason.",true);return;}
+  }
+  const f=greyFields(code,detail);
+  saveLeadFields(id,f,`Greyed out: ${f.excluded.reason}`,"Greyed out. It no longer counts towards the rates.");
+}
+function greyFromPanel(id){
+  const code=document.getElementById("gr-"+id).value, detail=document.getElementById("grd-"+id).value;
+  if(!code){toast("Choose a reason first.",true);return;}
+  if(code==="other"&&!String(detail).trim()){toast("Other needs a short reason in the detail box.",true);return;}
+  const f=greyFields(code,detail);
+  saveLeadFields(id,f,`Greyed out: ${f.excluded.reason}`,"Greyed out. It no longer counts towards the rates.");
+}
+// kept for anything still calling the old name
+function excludeLead(id){openLead=id;renderLeads();}
+function toggleSel(id,on){if(on)SEL.add(id);else SEL.delete(id);renderBulkBar();
+  const sa=document.getElementById("selAll");if(sa){const live=SHOWN.filter(x=>{const l=S.leads.find(y=>y.id===x);return l&&!isExcluded(l);});sa.checked=live.length>0&&live.every(x=>SEL.has(x));sa.indeterminate=!sa.checked&&live.some(x=>SEL.has(x));}}
+function selectAllShown(on){
+  SHOWN.forEach(id=>{const l=S.leads.find(x=>x.id===id);if(l&&!isExcluded(l)){if(on)SEL.add(id);else SEL.delete(id);}});
+  renderLeads();
+}
+function renderBulkBar(){
+  const bar=document.getElementById("bulkBar");if(!bar)return;
+  if(!SEL.size){bar.style.display="none";bar.innerHTML="";return;}
+  bar.style.display="block";
+  bar.innerHTML=`<div class="row"><strong class="small">${SEL.size} lead(s) selected</strong>
+    <select id="bulkReason">${reasonOptions("Choose a reason…")}</select>
+    <input id="bulkDetail" placeholder="Detail (optional, required for Other)" class="grow" style="min-width:200px">
+    <button class="btn orange sm" onclick="bulkGrey()">Grey out selected</button>
+    <button class="btn ghost sm" onclick="SEL.clear();renderLeads()">Clear selection</button></div>`;
+}
+async function bulkGrey(){
+  const code=document.getElementById("bulkReason").value, detail=document.getElementById("bulkDetail").value;
+  if(!code){toast("Choose a reason first.",true);return;}
+  if(code==="other"&&!String(detail).trim()){toast("Other needs a short reason in the detail box.",true);return;}
+  const ids=[...SEL].filter(id=>{const l=S.leads.find(x=>x.id===id);return l&&!isExcluded(l);});
+  if(!ids.length)return;
+  const withResult=ids.filter(id=>S.leads.find(x=>x.id===id).result).length;
+  if(!confirm(`Grey out ${ids.length} lead(s) as "${reasonText(code,detail)}"?${withResult?`\n\n${withResult} of them have a result recorded and will drop out of the rates too.`:""}\n\nEach one can be undone individually.`))return;
+  const f=greyFields(code,detail);
+  let ok=0,failed=0;
+  document.getElementById("saveLbl").textContent=`Saving 0 of ${ids.length}…`;
+  for(const id of ids){
+    const l=S.leads.find(x=>x.id===id);
+    const prev=l.excluded;
+    l.excluded=Object.assign({},f.excluded);l.notes.push({d:today(),t:`Greyed out: ${f.excluded.reason}${WHO?` — ${WHO}`:""}`});
+    try{
+      const r=await api("lead",{method:"POST",body:{leadId:id,fields:{excluded:l.excluded},note:`Greyed out: ${f.excluded.reason}`,who:WHO}});
+      if(!r.ok)throw new Error("HTTP "+r.status);
+      const d=await r.json();VERSION=d.version;ok++;SEL.delete(id);
+    }catch(err){l.excluded=prev;l.notes.pop();failed++;}
+    document.getElementById("saveLbl").textContent=`Saving ${ok+failed} of ${ids.length}…`;
+  }
+  markClean();renderLeads();
+  logAct(`${WHO||"Someone"} greyed out ${ok} lead(s): ${f.excluded.reason}`);
+  toast(`${ok} lead(s) greyed out${failed?`, ${failed} not saved (still selected, try again)`:""}.`,failed>0);
 }
 function includeLead(id){
   const l=S.leads.find(x=>x.id===id);
@@ -923,7 +1013,7 @@ function updExcludeReason(id,inp){
   const v=inp.value.trim();
   if(!v){toast("The reason can't be blank. Use Include again instead.",true);inp.value=l.excluded.reason;return;}
   if(v===l.excluded.reason)return;
-  saveLeadFields(id,{excluded:Object.assign({},l.excluded,{reason:v,editedBy:WHO||"",editedAt:today()})},`Exclusion reason changed to: ${v}`);
+  saveLeadFields(id,{excluded:Object.assign({},l.excluded,{reason:v,editedBy:WHO||"",editedAt:today()})},`Grey-out reason changed to: ${v}`);
 }
 async function updLead(id,k,v){
   const l=S.leads.find(x=>x.id===id);
@@ -1067,7 +1157,7 @@ function renderCases(){
     }
     return true;
   }).sort((a,b)=>String(b.c.publishedAt||"").localeCompare(String(a.c.publishedAt||""))||String(a.c.claimNumber).localeCompare(String(b.c.claimNumber)));
-  const stPill={untouched:`<span class="pill grey">No outreach yet</span>`,progress:`<span class="pill amber">Under way</span>`,positive:`<span class="pill green">Positive</span>`,dead:`<span class="pill grey">All excluded</span>`};
+  const stPill={untouched:`<span class="pill grey">No outreach yet</span>`,progress:`<span class="pill amber">Under way</span>`,positive:`<span class="pill green">Positive</span>`,dead:`<span class="pill grey">All greyed out</span>`};
   document.getElementById("casesBody").innerHTML=rows.map(({c,r})=>{
     const rep=reps[c.id];
     const exp=openCase===c.id;
@@ -1076,7 +1166,7 @@ function renderCases(){
       <td><strong>${esc(c.caseTitle||"")}</strong><br><span class="small muted">${esc(c.topics||"")}</span></td>
       <td class="small">${esc(c.cycle||"")}</td>
       <td class="small">${valueHtml(c,false)}</td>
-      <td class="small">${r.leads.length}${r.leads.length!==r.live.length?` <span class="muted">(${r.leads.length-r.live.length} excl.)</span>`:""}<br><span class="muted">${[r.clm?`${r.clm} clm`:"",r.def?`${r.def} def`:"",r.int?`${r.int} int`:""].filter(Boolean).join(" · ")}</span></td>
+      <td class="small">${r.leads.length}${r.leads.length!==r.live.length?` <span class="muted">(${r.leads.length-r.live.length} greyed)</span>`:""}<br><span class="muted">${[r.clm?`${r.clm} clm`:"",r.def?`${r.def} def`:"",r.int?`${r.int} int`:""].filter(Boolean).join(" · ")}</span></td>
       <td class="small">${r.who.length?esc(r.who.join(", ")):`<span class="muted">—</span>`}<br>${stPill[r.state]}</td>
       <td>${r.best?`<span class="pill ${r.best==="Work Won"?"green":"navy"}">${esc(r.best)}</span>`:`<span class="muted small">—</span>`}</td>
       <td>${rep?`<span class="pill red" title="${esc(rep.map(x=>`${x.claimNumber}: ${x.why}`).join("\n"))}">Possible repeat (${rep.length})</span>`:""}${c.status==="Updated"?` <span class="pill navy">Updated</span>`:""}</td>
@@ -1109,7 +1199,7 @@ function caseDetail(c,r,rep){
       <p class="small muted" style="margin-top:6px">If it's the same matter entered twice, keep the one with outreach logged and delete the other's leads. If it's a related claim between the same parties, leave both and coordinate outreach.</p></div>`:""}
     <p class="small muted" style="margin-bottom:4px">Claimant: ${esc(c.clmParty||"n/d")}${c.clmInHouse?` · in-house: ${esc(c.clmInHouse)}`:""}<br>Defendant: ${esc(c.defParty||"n/d")}${c.defInHouse?` · in-house: ${esc(c.defInHouse)}`:""}</p>
     <div class="psum">${esc(c.summary||"No summary.")}</div>
-    <table class="mini"><thead><tr><th>Lead</th><th>Side</th><th>Firm</th><th>Owner</th><th>Outreach</th><th>Status</th><th>Result</th><th>Excluded</th></tr></thead>
+    <table class="mini"><thead><tr><th>Lead</th><th>Side</th><th>Firm</th><th>Owner</th><th>Outreach</th><th>Status</th><th>Result</th><th>Greyed out</th></tr></thead>
     <tbody>${r.leads.map(row).join("")||`<tr><td colspan="8" class="muted">No leads on this case.</td></tr>`}</tbody></table>
   </td></tr>`;
 }
@@ -1134,7 +1224,7 @@ function renderDash(){
   const conflicts=S.drafts.reduce((n,d)=>n+(d.conflicts||[]).filter(c=>!c.chosen).length,0);
   const reps=repeatMap();const nRep=Object.keys(reps).length;
   document.getElementById("dashStats").innerHTML=[
-    ["Cases",S.claims.length],["Live leads",pub],["Excluded leads",nExcl],["Contacted",contacted],["Positive",positive],
+    ["Cases",S.claims.length],["Live leads",pub],["Greyed out",nExcl],["Contacted",contacted],["Positive",positive],
     ["Due now",overdue.length],["Scheduled revisits",scheduled.length],["Available to claim",avail]
   ].map(([l,v])=>`<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("");
   let alerts="";
@@ -1176,11 +1266,10 @@ function renderReports(){
     if(["Meeting Set","Quoted","Work Won"].includes(l.result))r.meetings++;
     if(l.result==="Work Won")r.won++;r.billed+=num(l.billedUSD);
   }));
-  const xFirm=X.filter(l=>l.excluded.scope==="Firm").length;
   document.getElementById("reportBody").innerHTML=`
   <div class="statgrid">
     <div class="stat"><div class="v">${L.length}</div><div class="l">Live leads</div></div>
-    <div class="stat"><div class="v">${X.length}</div><div class="l">Excluded leads</div></div>
+    <div class="stat"><div class="v">${X.length}</div><div class="l">Greyed out</div></div>
     <div class="stat"><div class="v">${attempted.length}</div><div class="l">Outreach attempted</div></div>
     <div class="stat"><div class="v">${pct(responded.length,attempted.length)}</div><div class="l">Response rate</div></div>
     <div class="stat"><div class="v">${pct(won.length,attempted.length)}</div><div class="l">Close rate</div></div>
@@ -1191,9 +1280,12 @@ function renderReports(){
     <div class="stat"><div class="v">${fmt$(est)}</div><div class="l">Est. value</div></div>
     <div class="stat"><div class="v">${fmt$(billed)}</div><div class="l">Billed to date</div></div>
   </div>
-  <p class="small muted" style="margin:-4px 0 12px">Rates use live leads only. Close rate is work won as a share of outreach attempted. Excluded leads: ${X.length-xFirm} marked as dead ends by sales, ${xFirm} from blacklisted firms. Billed includes any billing on excluded leads.</p>
+  <p class="small muted" style="margin:-4px 0 12px">Rates use live leads only. Close rate is work won as a share of outreach attempted. Billed includes any billing on greyed-out leads.</p>
+  ${X.length?`<p class="small" style="margin:-4px 0 12px"><strong>Greyed out by reason:</strong> ${(()=>{
+    const by={};X.forEach(l=>{const k=l.excluded.scope==="Firm"?"Blacklisted firm":((GREY_REASONS.find(([c])=>c===l.excluded.code)||[,"Other"])[1]);by[k]=(by[k]||0)+1;});
+    return Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([k,n])=>`${esc(k)} ${n}`).join(" · ");})()}</p>`:""}
   <h3>By AE</h3>
-  <div class="tblwrap"><table><thead><tr><th>AE</th><th>Live leads</th><th>Excluded</th><th>Contacted</th><th>Positive</th><th>Meeting+</th><th>Work won</th><th>Close rate</th><th>Billed</th></tr></thead>
+  <div class="tblwrap"><table><thead><tr><th>AE</th><th>Live leads</th><th>Greyed out</th><th>Contacted</th><th>Positive</th><th>Meeting+</th><th>Work won</th><th>Close rate</th><th>Billed</th></tr></thead>
   <tbody>${Object.entries(byAE).sort((a,b)=>b[1].leads-a[1].leads).map(([a,r])=>`<tr><td>${esc(a)}</td><td>${r.leads}</td><td class="muted">${r.excluded||"–"}</td><td>${r.contacted}</td><td>${r.positive}</td><td>${r.meetings}</td><td>${r.won}</td><td>${pct(r.won,r.attempted)}</td><td>${fmt$(r.billed)}</td></tr>`).join("")||`<tr><td colspan="9" class="muted">No leads yet.</td></tr>`}</tbody></table></div>
   <p class="small muted" style="margin-top:8px">Live leads by side: ${cnt(l=>l.side==="Claimant")} claimant-side, ${cnt(l=>l.side==="Defendant")} defendant-side, ${cnt(l=>l.side==="Intelligence")} intelligence. Cases covered: ${new Set(ALL.map(l=>l.claimId)).size}.</p>`;
 }

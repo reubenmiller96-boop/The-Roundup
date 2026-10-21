@@ -70,9 +70,12 @@ export the cycle package → import it here.
 - **Blacklisted firms**: on the Firms tab, set a firm's Blacklist to Blacklisted and give a
   reason (editable later). Its leads are greyed out and kept out of response and close rates.
   Leads that already have a result recorded are left alone. Lifting the blacklist restores them.
-- **Excluding a lead**: any salesperson can open a lead and choose "Exclude as a dead end",
-  with a reason. A lead greyed by a firm blacklist can be included again if someone thinks it
-  can still close. Excluded leads are counted separately in Reports.
+- **Greying out a lead**: any salesperson can grey out a lead that's a dead end, from the
+  "Grey out…" picker on its row or from inside the lead. Pick a reason (Litigant in person,
+  No outreach done, Settled or discontinued, Won't use external vendors, Conflicted, Other)
+  and add detail if useful; Other needs detail. Tick several rows to grey them out in one go.
+  Undo puts a lead back. A lead greyed by a firm blacklist can be included again if someone
+  thinks it can still close. Reports count greyed-out leads separately, broken down by reason.
 - **Cases**: one row per case with all its claimant and defendant leads, who has done outreach,
   the furthest result reached, and a flag on cases that look like repeats (same claim number
   in a different format, or the same claimant and defendant). Imports report possible repeats.
